@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cv_vlm"
+version = "0.1.0"
+description = "Semantic navigation prototype with VLM-driven masks and TUM RGB-D dataset support"
+authors = [{name = "OpenAI Assistant"}]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "opencv-python-headless>=4.9",
+    "typer>=0.9",
+    "tqdm>=4.66",
+    "pydantic>=2.6",
+]
+
+[project.scripts]
+cv-vlm = "cv_vlm.cli:app"
