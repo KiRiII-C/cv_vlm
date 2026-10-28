@@ -9,6 +9,7 @@ on:
       - src/semantic_map/floor_alignment.py
       - src/semantic_map/offline_reconcile.py
       - src/semantic_map/engine.py
+      - src/semantic_map/planner.py
       - .github/workflows/real-end-to-end.yml
   workflow_dispatch:
 permissions:
@@ -62,17 +63,20 @@ jobs:
             --out results/tum_real/reconciliation.json | tee reconciliation.log
           python -m semantic_map.visualize_real --root results/tum_real
           python -m semantic_map.replay_ablation --root results/tum_real
-      - name: Ground real operator commands in real object map and occupancy evidence
+      - name: Compact VLM descriptions of real RGB object crops, persist checked semantics
+        run: |
+          set -o pipefail
+          python -m pip install 'transformers>=4.55,<6' pillow
+          OMP_NUM_THREADS=3 python -u -m semantic_map.vlm_enrich \
+            --root results/tum_real --out results/vlm_semantics \
+            --max-objects 6 | tee vlm.log
+      - name: Natural-language operator commands grounded in VLM-enriched object memory
         run: |
           set -o pipefail
           python -u -m semantic_map.operator_e2e \
             --memory results/tum_real --geometry results/full_geometry \
-            --output results/operator_e2e             --gravity results/gravity_map | tee operator.log
-      - name: Compact VLM descriptions of selected real RGB object crops (immutable IDs)
-        run: |
-          set -o pipefail
-          python -m pip install 'transformers>=4.55,<6' pillow
-          OMP_NUM_THREADS=3 python -u -m semantic_map.vlm_enrich             --root results/tum_real --out results/vlm_semantics             --max-objects 6 | tee vlm.log
+            --output results/operator_e2e \
+            --gravity results/gravity_map | tee operator.log
       - name: End-to-end integrity and safety assertions, NOT an ID/SLAM/Nav2 accuracy claim
         run: |
           python - <<'PY'
