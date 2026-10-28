@@ -86,7 +86,13 @@ def run(memory_dir,geom_dir,output_dir):
                "goal_xy_m":d.goal_xy,"path_xy":d.path_xy,
                "explanation":d.explanation,"source":"offline_astar_not_nav2"}
         if d.status=="planned":
-            entry["nav2_goal_candidate_not_executed"]=goal_as_dict(d)
+            if bool(report.get("occupancy_2d",{}).get("nav_ready")):
+                entry["nav2_goal_candidate_not_executed"]=goal_as_dict(d)
+            else:
+                # A diagnostic (uncalibrated) occupancy projection is NEVER a
+                # verified Nav2 costmap. Keep path visible, block dispatch.
+                entry["status"]="route_candidate_unvalidated_map"
+                entry["explanation"] += "; маршрут только диагностический: высота пола не калибрована"
         answer.append(entry)
     payload={
         "data_source":"actual TUM fr1_desk RGB-D map and YOLO observations",
