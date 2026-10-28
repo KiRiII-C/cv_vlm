@@ -35,8 +35,8 @@
     },
     "semantic_vlm": {
       "status": "IMPLEMENTED_UNVALIDATED",
-      "evidence": "Real SmolVLM-256M-Instruct inference on six selected object views; nonempty descriptions, two descriptions rejected by consistency check. No independent semantic groundtruth.",
-      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40713659539"
+      "evidence": "SmolVLM-256M-Instruct real inference: 24 confirmed candidate objects, up to two images per object; 12 descriptions lexically consistent and persisted, 12 quarantined, zero physical-ID changes. No GT semantic accuracy.",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40748057181"
     },
     "nav2_integration": {
       "status": "IMPLEMENTED_UNVALIDATED",
@@ -79,6 +79,15 @@
       "path_poses": 30,
       "command": "подъедь к obj_9f79b2cff0075fd7",
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40748419765"
+    },
+    "vlm_24_object_multiview_inference": {
+      "status": "PASS",
+      "scope": "CPU inference and lexical quarantine, not GT semantic correctness",
+      "real_object_crops": 24,
+      "accepted_descriptions": 12,
+      "quarantined": 12,
+      "physical_id_mutations": 0,
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40748057181"
     }
   }
 }
