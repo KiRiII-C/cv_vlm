@@ -1,0 +1,31 @@
+name: TSDF numerical diagnosis
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths: [scripts/tsdf_probe.py, .github/workflows/tsdf-probe.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install -e '.[rgbd]'
+          python -m pip install 'open3d>=0.18,<0.21'
+      - name: Full-resolution depth and TSDF volume probe
+        run: |
+          set -o pipefail
+          OMP_NUM_THREADS=3 python -u scripts/tsdf_probe.py | tee tsdf_probe.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tsdf-probe-log
+          path: tsdf_probe.log
