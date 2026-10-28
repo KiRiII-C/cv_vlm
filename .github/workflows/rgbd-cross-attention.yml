@@ -1,0 +1,38 @@
+name: rgbd-cross-attention-10x2
+on:
+  push:
+    branches:
+      - experiments/rgbd-cross-attention-20261028
+    paths:
+      - 'experiments/rgbd_fusion/**'
+      - '.github/workflows/rgbd-cross-attention.yml'
+  workflow_dispatch:
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: experiments/rgbd_fusion
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PyTorch CPU and image dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install numpy opencv-python-headless requests
+      - name: Run 10 + 10 real RGB-D camera frames
+        run: python -u experiment.py
+      - name: Upload quantitative results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rgbd-cross-attention-results
+          path: |
+            experiments/rgbd_fusion/results.json
+          if-no-files-found: warn
