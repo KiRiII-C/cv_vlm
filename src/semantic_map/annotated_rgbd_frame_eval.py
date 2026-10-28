@@ -169,6 +169,31 @@ def predict_scene(scene,out,datadir='data/annotated_rgbd',maxframes=180,
         plot_clouds(out,xyz,cls,gt_y[nn],scene,points=40000)
     tracks=[t for t in memory.tracks() if t.state=='confirmed']
     mapping_points=cloud.export(out/'dense_colored_object_instances.ply',track_filter={t.object_id for t in tracks})
+    # Interactive physical-identity candidate layer, colored by immutable UUID,
+    # using actual segmented RGB-D points (not axis-aligned boxes).
+    if mapping_points['exported_points']>=100:
+        from .dense_scene_viz import read_colored
+        import plotly.graph_objects as go
+        objects=read_colored(out/'dense_colored_object_instances.ply')
+        rng=np.random.default_rng(20261028+scene)
+        chosen=rng.choice(len(objects),min(len(objects),90000),replace=False)
+        displayed=objects[chosen]
+        bg=xyz[rng.choice(len(xyz),min(len(xyz),25000),replace=False)]
+        fig=go.Figure()
+        fig.add_trace(go.Scatter3d(x=bg[:,0],y=bg[:,1],z=bg[:,2],mode='markers',
+                      name='RGB-D surface',marker=dict(size=1,color='#9fa4aa',opacity=.15),hoverinfo='skip'))
+        for key,entry in mapping_points['instances'].items():
+            mask=displayed['instance_index']==int(key)
+            if not mask.any():continue
+            clr=entry['rgb'];uid=entry['uuid']
+            fig.add_trace(go.Scatter3d(x=displayed['x'][mask],y=displayed['y'][mask],
+                z=displayed['z'][mask],name=f'UUID {uid[-8:]}',mode='markers',
+                marker=dict(size=2,opacity=.85,color=f'rgb({clr[0]},{clr[1]},{clr[2]})'),
+                hovertemplate=f'Predicted object UUID: {uid}<br>X=%{{x:.3f}} Y=%{{y:.3f}} Z=%{{z:.3f}}<extra></extra>'))
+        fig.update_layout(title=f'RGB-D scene {scene:02d}: persistent UUID-colored object surface candidates',
+                          template='plotly_dark',scene=dict(aspectmode='data'),height=800,
+                          margin=dict(l=0,r=0,t=45,b=0))
+        fig.write_html(str(out/'colored_physical_ids_interactive.html'),include_plotlyjs=True)
     report['num_confirmed_tracks']=len(tracks)
     report['dense_point_instance_map']=mapping_points
     (out/'rgbd_to_3d_gt_report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
