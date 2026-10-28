@@ -86,9 +86,12 @@ def hsv_feature(rgb,mask):
     a=np.sqrt(hist.ravel().astype(float)+1e-8)
     return (a/np.linalg.norm(a)).tolist()
 
-def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yolo11n-seg.pt',
-                    confidence=.30,max_frames=0,voxel=.07,pose_json=None,device='cpu'):
-    from ultralytics import YOLO
+def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yoloe-26s-seg.pt',
+                    confidence=.27,max_frames=0,voxel=.07,pose_json=None,device='cpu',
+                    classes_json=None,temporal_tracking=True,appearance_mode='hsv_spatial'):
+    from .yoloe26_detector import build_detector,class_list
+    from .temporal_tracker import TemporalTracker,Detection
+    from .reid_features import AppearanceEncoder
     from matplotlib import pyplot as plt
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
     root=download_scene(dataset)
@@ -98,25 +101,35 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
     pairs,pose_source=pose_override(pairs,pose_json)
     if max_frames>0:pairs=pairs[:max_frames]
     print('REAL_FRAMES',len(pairs),'model',model_name,flush=True)
-    det=YOLO(model_name)
+    configured_classes=class_list(classes_json)
+    det=build_detector(model_name,configured_classes,
+                       legacy=not Path(model_name).name.startswith('yoloe-26'))
+    embedder=AppearanceEncoder(appearance_mode,device=device if device!='0' else 'cuda:0')
+    memory_hint={}
+    tracker=TemporalTracker(high_thresh=confidence,low_thresh=min(.10,confidence*.55),
+                            max_lost=40) if temporal_tracking else None
     mem=MemoryStore(output/'semantic_memory.sqlite')
-    mapping=SemanticMapper(mem,min_hits=2)
+    mapping=SemanticMapper(mem,min_hits=2,association_mode='multiview' if temporal_tracking else 'fused')
     vox=SurfaceVoxelMap(output/'surface_voxels.sqlite',voxel_m=voxel)
     dense_instances=InstanceCloud(voxel_m=.015,stride=3)
-    reports=[];evidence=[];stats={'frames':len(pairs),'detections':0,'invalid_masks':0,'labels':{},'statuses':{}}
+    reports=[];evidence=[];stats={'frames':len(pairs),'detections':0,'invalid_masks':0,'labels':{},'statuses':{},
+        'model':model_name,'configured_classes':configured_classes,
+        'appearance_mode':appearance_mode,'temporal_enabled':bool(temporal_tracking),
+        'temporal_statuses':{},'short_to_global_conflicts':0}
     colors={'chair':'#f58518','dining table':'#4c78a8','tv':'#54a24b'}
     for i,(stamp,rgbname,depthname,T) in enumerate(pairs):
         rgb=cv2.imread(str(rgbname),cv2.IMREAD_COLOR)
         depth=cv2.imread(str(depthname),cv2.IMREAD_UNCHANGED)
         if rgb is None or depth is None or rgb.shape[:2]!=depth.shape:raise ValueError('Invalid TUM frame')
         vox.add_frame(depth,K,T,'tum_freiburg1_desk',str(stamp),stride=8)
-        result=det.predict(source=rgb,conf=confidence,retina_masks=True,verbose=False,device=device,imgsz=640)[0]
+        detection_conf=min(.10,confidence*.55) if tracker is not None else confidence
+        result=det.predict(rgb,conf=detection_conf,device=device,imgsz=640)
         observations=[];view_rects=[];accepted_masks=[];display=rgb.copy()
         if result.masks is not None and result.boxes is not None:
             masks=result.masks.data.cpu().numpy();ids=result.boxes.cls.int().cpu().tolist()
             scores=result.boxes.conf.cpu().tolist()
             for j,(m,k,conf) in enumerate(zip(masks,ids,scores)):
-                label=str(det.names[k])
+                label=det.class_name(k)
                 if label in ('person','clock'):
                     continue  # dynamic/hard-to-static in this baseline
                 if m.shape!=depth.shape:m=cv2.resize(m.astype('float32'),(640,480),interpolation=cv2.INTER_NEAREST)
@@ -126,7 +139,7 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
                 ds=ds[(ds>.25)&(ds<5)]
                 if len(ds)<40:stats['invalid_masks']+=1;continue
                 pivot=np.median(ds);mask=mask & (np.abs(depth.astype('float32')/5000-pivot)<max(.18,.16*pivot))
-                feat=hsv_feature(rgb,mask)
+                feat=embedder(rgb,mask)
                 obs=make_observation(depth,mask,K,T,source='tum_freiburg1_desk',frame_id=str(stamp),
                                     detection_id=f'det{j}',label=label,timestamp=stamp,appearance=feat,
                                     description=label,confidence=float(conf),min_support=50)
@@ -141,12 +154,48 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
                     cv2.drawContours(display,contours,-1,(0,210,240),2)
                     cv2.putText(display,label,(int(np.median(np.where(mask)[1])),int(np.median(np.where(mask)[0]))),
                                 cv2.FONT_HERSHEY_SIMPLEX,.6,(20,50,230),2)
+        # Track only consecutive RGB-D instance proposals. Low-confidence
+        # masks can recover active short tracks, but never create new physical
+        # objects on their own.
+        local_assignments=None
+        if tracker is not None:
+            proposals=[]
+            for o,rect,mask in zip(observations,view_rects,accepted_masks):
+                x0,y0,x1,y1=rect
+                resized=cv2.resize(mask.astype('uint8'),(80,60),
+                                   interpolation=cv2.INTER_NEAREST).astype(bool)
+                proposals.append(Detection(o.detection_id,o.label,
+                    np.array([x0,y0,x1+1,y1+1],float),o.center.copy(),
+                    o.confidence,o.appearance,resized))
+            local_assignments=tracker.update(i,proposals)
+            for entry in local_assignments:
+                stats['temporal_statuses'][entry.status]=stats['temporal_statuses'].get(entry.status,0)+1
+            keep=[j for j,a in enumerate(local_assignments) if a.short_id is not None]
+            observations=[observations[j] for j in keep]
+            accepted_masks=[accepted_masks[j] for j in keep]
+            view_rects=[view_rects[j] for j in keep]
+            local_assignments=[local_assignments[j] for j in keep]
         evidence.append([{'source':o.source,'frame_id':o.frame_id,
                           'detection_id':o.detection_id,'label':o.label,
                           'center':o.center.tolist(),'low':o.low.tolist(),'high':o.high.tolist(),
                           'timestamp':o.timestamp,'appearance':o.appearance.tolist() if o.appearance is not None else None,
                           'description':o.description,'confidence':o.confidence} for o in observations])
-        decisions=mapping.process_frame(observations)
+        priors={}
+        if local_assignments is not None:
+            priors={o.detection_id:memory_hint[a.short_id]
+                    for o,a in zip(observations,local_assignments)
+                    if a.short_id in memory_hint}
+        decisions=mapping.process_frame(observations,prior_ids=priors)
+        if local_assignments is not None:
+            for o,short,decision in zip(observations,local_assignments,decisions):
+                if decision.object_id is None:continue
+                old=memory_hint.get(short.short_id)
+                if old is not None and old!=decision.object_id:
+                    # Contradictory temporary/global identity is diagnostic,
+                    # not permission to alias two physical objects.
+                    stats['short_to_global_conflicts']+=1
+                else:
+                    memory_hint[short.short_id]=decision.object_id
         if len(decisions)!=len(accepted_masks):
             raise RuntimeError('Instance observation/mask/association count mismatch')
         for accepted_mask,decision in zip(accepted_masks,decisions):
@@ -168,6 +217,8 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
                     cv2.imwrite(str(viewdir/f'{dec.object_id}_{i:04}.jpg'),crop)
         for dec in decisions:stats['statuses'][dec.status]=stats['statuses'].get(dec.status,0)+1
         reports.append({'frame':i,'timestamp':stamp,'detections':len(observations),
+                        'short_track_ids':[a.short_id for a in local_assignments]
+                                           if local_assignments is not None else None,
                         'associations':[d.__dict__ for d in decisions]})
         if i%60==0:
             cv2.imwrite(str(output/f'overlay_{i:04}.jpg'),display)
@@ -198,7 +249,16 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
     return stats
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--data',default='data/tum');p.add_argument('--output',default='results/tum_real');
-    p.add_argument('--model',default='yolo11n-seg.pt');p.add_argument('--conf',type=float,default=.3);p.add_argument('--max-frames',type=int,default=0);p.add_argument('--pose-json',default=None);p.add_argument('--device',default='cpu',help='Ultralytics device, e.g. cpu or 0 for CUDA')
-    a=p.parse_args();infer_benchmark(a.data,a.output,a.model,a.conf,a.max_frames,pose_json=a.pose_json,device=a.device)
+    p=argparse.ArgumentParser();p.add_argument('--data',default='data/tum');p.add_argument('--output',default='results/tum_real')
+    p.add_argument('--model',default='yoloe-26s-seg.pt')
+    p.add_argument('--classes-json',default='config/yoloe26_classes.json')
+    p.add_argument('--conf',type=float,default=.27);p.add_argument('--max-frames',type=int,default=0)
+    p.add_argument('--pose-json',default=None);p.add_argument('--device',default='cpu')
+    p.add_argument('--appearance',choices=['hsv_spatial','mobilenetv3'],default='hsv_spatial')
+    p.add_argument('--disable-temporal-tracking',action='store_true')
+    a=p.parse_args()
+    infer_benchmark(a.data,a.output,a.model,a.conf,a.max_frames,pose_json=a.pose_json,
+                    device=a.device,classes_json=a.classes_json,
+                    temporal_tracking=not a.disable_temporal_tracking,
+                    appearance_mode=a.appearance)
 if __name__=='__main__':main()
