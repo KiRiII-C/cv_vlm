@@ -1,0 +1,66 @@
+name: Full RGB-D frame to annotated 3D GT evaluation (two scenes)
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - '.github/workflows/annotated-rgbd-frames.yml'
+      - 'src/semantic_map/annotated_rgbd_frame_eval.py'
+      - 'src/semantic_map/instance_cloud.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  evaluate-real-rgbd-scene:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        scene: [11, 14]
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install YOLO RGBD and 3D GT evaluation dependencies
+        run: |
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' ultralytics matplotlib
+      - name: Process real RGBD frames and compare 3D semantic map to official labels
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.annotated_rgbd_frame_eval \
+            --data "$RUNNER_TEMP/rgbd-annotated" \
+            --scene ${{ matrix.scene }} \
+            --out "results/annotated_scene_${{ matrix.scene }}" \
+            --maxframes 120 --device cpu | tee gt_rgbd.log
+      - name: Assert predicted geometry alignment to external 3D GT before scoring
+        run: |
+          python - <<'PY'
+          import json,glob,math
+          j=json.load(open(glob.glob('results/annotated_scene_*/rgbd_to_3d_gt_report.json')[0]))
+          assert j['status']=='MEASURED_RGBD_TO_3D_GT_SEMANTICS',j
+          assert j['geometry_match_to_GT_8cm']>=0.20,j
+          assert j['rgbd_frames_mapped']>=100,j
+          assert j['physical_id_gt_available'] is False
+          m=j['semantic_metrics']
+          assert math.isfinite(m['accuracy']),m
+          assert math.isfinite(m['mIoU_foreground']),m
+          print('ACTUAL_RGBD_3D_SEMANTIC_GT_ACCEPTED_FOR_MEASUREMENT',
+                j['scene'],j['rgbd_frames_mapped'],
+                m['accuracy'],m['mIoU_foreground'])
+          PY
+      - name: Artifact colored predicted-vs-GT maps and physical ID candidates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-rgbd-scenes-v2-3d-gt-scene-${{ matrix.scene }}
+          path: |
+            results/annotated_scene_${{ matrix.scene }}/
+            gt_rgbd.log
+          retention-days: 30
+          if-no-files-found: warn
