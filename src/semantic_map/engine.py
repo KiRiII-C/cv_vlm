@@ -1,7 +1,7 @@
 """Offline global data association with persistent IDs and ambiguity handling."""
 from __future__ import annotations
 from dataclasses import dataclass
-from uuid import uuid4
+from uuid import uuid5, NAMESPACE_URL
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 from .models import Track
@@ -121,7 +121,9 @@ class SemanticMapper:
                     self.store.write_observation(o,None,'unresolved')
                     results[original_idx]=Decision(o.detection_id,None,'unresolved',top)
                 else:
-                    t=Track(object_id='obj_'+uuid4().hex[:16],label=o.label,center=o.center.copy(),
+                    seed='|'.join(map(str,o.key))
+                    stable_id='obj_'+uuid5(NAMESPACE_URL,'semantic_map_observation_v1|'+seed).hex[:16]
+                    t=Track(object_id=stable_id,label=o.label,center=o.center.copy(),
                             low=o.low.copy(),high=o.high.copy(),appearance=o.appearance,
                             hits=1,first_seen=o.timestamp,last_seen=o.timestamp,
                             description=o.description,map_version=o.map_version,map_id=o.map_id)
