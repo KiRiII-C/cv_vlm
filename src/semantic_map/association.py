@@ -42,6 +42,19 @@ def score(track,obs):
 def score_variant(track,obs,mode="fused"):
     """Controlled association ablations (no pretrained appearance learning here)."""
     if mode=="fused":return score(track,obs)
+    if mode=="adaptive_reid":
+        base=score(track,obs)
+        if track.map_id!=obs.map_id or track.map_version!=obs.map_version or track.label!=obs.label:
+            return None
+        if track.appearance is not None and obs.appearance is not None and track.appearance.shape==obs.appearance.shape:
+            dt=max(0.,obs.timestamp-track.last_seen)
+            delta=float(np.linalg.norm(track.center-obs.center))
+            similarity=float(track.appearance@obs.appearance)
+            # Only after a long absence, with a distinctive and confident descriptor.
+            # Reappearance far away is a *hypothesis*, not proof of object motion.
+            if dt>8 and delta<2.5 and similarity>.92:
+                return max(base or 0, min(1.,.81*similarity+.19*np.exp(-delta/3.)))
+        return base
     if track.map_id!=obs.map_id or track.map_version!=obs.map_version:
         return None
     if track.label.strip().lower()!=obs.label.strip().lower():return None

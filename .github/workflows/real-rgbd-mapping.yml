@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/semantic_map/tum_yolo_pipeline.py'
       - 'src/semantic_map/visualize_real.py'
+      - 'src/semantic_map/replay_ablation.py'
       - '.github/workflows/real-rgbd-mapping.yml'
   workflow_dispatch:
 permissions:
@@ -32,6 +33,7 @@ jobs:
             --output results/tum_real --model yolo11n-seg.pt \
             2>&1 | tee tum_real.log
           python -m semantic_map.visualize_real --root results/tum_real
+          python -m semantic_map.replay_ablation --root results/tum_real
       - name: Upload real RGB-D maps, metadata, masks overlay, and track history
         if: always()
         uses: actions/upload-artifact@v4

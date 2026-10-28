@@ -99,7 +99,7 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
     mem=MemoryStore(output/'semantic_memory.sqlite')
     mapping=SemanticMapper(mem,min_hits=2)
     vox=SurfaceVoxelMap(output/'surface_voxels.sqlite',voxel_m=voxel)
-    reports=[];stats={'frames':len(pairs),'detections':0,'invalid_masks':0,'labels':{},'statuses':{}}
+    reports=[];evidence=[];stats={'frames':len(pairs),'detections':0,'invalid_masks':0,'labels':{},'statuses':{}}
     colors={'chair':'#f58518','dining table':'#4c78a8','tv':'#54a24b'}
     for i,(stamp,rgbname,depthname,T) in enumerate(pairs):
         rgb=cv2.imread(str(rgbname),cv2.IMREAD_COLOR)
@@ -134,6 +134,11 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
                     cv2.drawContours(display,contours,-1,(0,210,240),2)
                     cv2.putText(display,label,(int(np.median(np.where(mask)[1])),int(np.median(np.where(mask)[0]))),
                                 cv2.FONT_HERSHEY_SIMPLEX,.6,(20,50,230),2)
+        evidence.append([{'source':o.source,'frame_id':o.frame_id,
+                          'detection_id':o.detection_id,'label':o.label,
+                          'center':o.center.tolist(),'low':o.low.tolist(),'high':o.high.tolist(),
+                          'timestamp':o.timestamp,'appearance':o.appearance.tolist() if o.appearance is not None else None,
+                          'description':o.description,'confidence':o.confidence} for o in observations])
         decisions=mapping.process_frame(observations)
         for dec in decisions:stats['statuses'][dec.status]=stats['statuses'].get(dec.status,0)+1
         reports.append({'frame':i,'timestamp':stamp,'detections':len(observations),
@@ -151,6 +156,9 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
                        'low_xyz_m':t.low.tolist(),'high_xyz_m':t.high.tolist(),
                        'hits':t.hits,'state':t.state,'description':t.description} for t in tracks]
     (output/'real_mapping_report.json').write_text(json.dumps(stats,ensure_ascii=False,indent=2))
+    import gzip
+    with gzip.open(output/'observation_evidence.json.gz','wt',encoding='utf-8') as f:
+        json.dump(evidence,f,ensure_ascii=False,separators=(',',':'))
     (output/'real_frame_associations.json').write_text(json.dumps(reports,ensure_ascii=False,indent=2))
     (output/'poses_and_dataset.json').write_text(json.dumps({'source':'TUM fr1_desk',
                 'frames':[{'timestamp':float(t),'rgb':p.name,'depth':d.name,'T_map_cam':T.tolist()} for t,p,d,T in pairs]},indent=2))

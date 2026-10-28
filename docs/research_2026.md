@@ -79,3 +79,33 @@ object instance store (SQLite) + voxel semantic vote → scene graph and view se
 
 **Не объявляется окончательно лучшей на научном уровне**, пока не выполнены реальные
 сравнительные тесты с аннотированной идентичностью и сценами train/test.
+
+### E — Реальный TUM Freiburg1 Desk, полный прогон 596 кадров
+
+Запуск [GitHub Actions 40700640646](https://github.com/KiRiII-C/cv_vlm/actions/runs/40700640646)
+завершился успешно (CPU; предобученная `yolo11n-seg.pt`). Обработаны все
+596 синхронизированных пары RGB-D, имеющие эталонные позы с допуском 30 мс.
+
+- 2541 валидное 3D наблюдение после 2D instance segmentation и фильтрации глубины;
+- 27 масок без достаточной 3D опоры;
+- 85 созданных треков; 54 подтверждённых; 32 трека с 10+ наблюдениями;
+- 15763 3D вокселей наблюдаемых поверхностей;
+- 2288 подтвержденных ассоциаций; 121 unresolved; 23 ambiguous; 23 conflict; 1 duplicate detection.
+
+Наблюдались **дублирующиеся/фрагментированные треки** (`tv`: 13;
+`mouse`: 14; `book`: 12, включая временные треки) и ошибки 2D классификации:
+часть поверхности стола была размечена как `bed` в кадре 0300.
+Поэтому требование «никаких дубликатов» в текущей реализации НЕ выполнено.
+Нельзя называть 85 треков 85 уникальными физическими предметами.
+
+Отдельный replay-процесс переигрывает одинаковые реальные сохранённые наблюдения
+через geometry-only, appearance-only, fused и adaptive Re-ID; результаты
+`real_association_ablation.json` после завершения повторного GitHub job.
+
+### Архитектурный риск
+
+Hungarian assignment + HSV appearance сам по себе НЕ обеспечивает устойчивый
+object permanence: ошибка маски → нестабильная 3D AABB → новые временные треки.
+Рекомендуемые исследования: class-agnostic proposals, 3D aggregation против
+instance-oversegmentation, learned crop encoder, occupancy-negative evidence,
+submap reprojection on loop closure и оценки на ScanNet/3RScan с GT IDs.

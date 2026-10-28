@@ -26,12 +26,17 @@ class SemanticMapper:
         self.association_mode=association_mode
 
     @staticmethod
-    def update(t,o,min_hits):
+    def update(t,o,min_hits,relocated=False):
         n=t.hits
         # Avoid moving persistent geometry too aggressively with viewpoint changes.
-        t.center=.75*t.center+.25*o.center
-        t.low=np.minimum(t.low,o.low)
-        t.high=np.maximum(t.high,o.high)
+        if relocated:
+            # Track the current pose of a candidate movable instance, not a huge
+            # box spanning two locations; observation history remains in SQLite.
+            t.center=o.center.copy();t.low=o.low.copy();t.high=o.high.copy()
+        else:
+            t.center=.75*t.center+.25*o.center
+            t.low=np.minimum(t.low,o.low)
+            t.high=np.maximum(t.high,o.high)
         if t.appearance is not None and o.appearance is not None:
             z=.85*t.appearance+.15*o.appearance
             t.appearance=z/np.linalg.norm(z)
@@ -99,7 +104,8 @@ class SemanticMapper:
                 continue
             if i in proposals and proposals[i] not in used_tracks:
                 j=proposals[i];t=tracks[j];used_tracks.add(j)
-                t=self.update(t,o,self.min_hits)
+                t=self.update(t,o,self.min_hits,relocated=(self.association_mode=="adaptive_reid"
+                    and o.timestamp-t.last_seen>8 and np.linalg.norm(t.center-o.center)>.45))
                 self.store.upsert_track(t)
                 self.store.write_observation(o,t.object_id,'matched')
                 results[original_idx]=Decision(o.detection_id,t.object_id,
