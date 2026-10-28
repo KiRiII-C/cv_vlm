@@ -56,7 +56,14 @@ def score_variant(track,obs,mode="fused"):
             return base
         if not similarities:return base
         best=max(similarities)
-        return float(min(1.,max(0.,base+.11*max(0.,best-.55))))
+        # A multi-view gallery is NOT evidence that two spatially different,
+        # similar-looking chairs are the same physical instance.
+        overlap=overlap_3d(track.low,track.high,obs.low,obs.high)
+        if overlap<.35:return base
+        if best<.35 and overlap<.65:return None
+        if overlap>=.70 and best>=.82:
+            return float(min(1.,base+.03*(best-.82)))
+        return base
     if mode=="adaptive_reid":
         base=score(track,obs)
         if track.map_id!=obs.map_id or track.map_version!=obs.map_version or track.label!=obs.label:
