@@ -1,0 +1,78 @@
+name: YOLOE-26X four-hypothesis factorial GT analysis
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/yoloe26x-factorial-gt.yml
+      - src/semantic_map/yoloe26x_factorial.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yoloe26x-factorial-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  gt-factorial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scene: ai_002_001
+            max_objects: 65
+          - scene: ai_005_001
+            max_objects: 130
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '3'
+      TORCH_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install exact official text-prompted YOLOE-26X with CPU Torch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' requests h5py pillow
+      - name: Inspect predicted YOLOE-26X vs GT masks on 20 physical-ID frames
+        shell: bash
+        run: |
+          set -Eeo pipefail
+          python -u -m semantic_map.yoloe26x_factorial \
+            --scene ${{ matrix.scene }} --out results/yoloe26x_${{ matrix.scene }} \
+            --model yoloe-26x-seg.pt --conf .10 --imgsz 640 \
+            --max-objects ${{ matrix.max_objects }} | tee yoloe26x_factorial.log
+      - name: Assert seven actual intervention variants and model identity
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,glob
+          report=json.load(open(glob.glob('results/yoloe26x_*/factorial_results.json')[0]))
+          assert report['model']=='yoloe-26x-seg.pt',report
+          assert report['frames']>=15,report['frames']
+          assert len(report['prompt_classes'])==12
+          assert set(report['variants'])=={'raw','oracle_class','oracle_mask',
+             'oracle_mask_class','oracle_dedup','oracle_recall','oracle_all'}
+          assert report['diagnostics']['gt_target_occurrences']>=20
+          assert report['GT_world_xyz_for_all_variants'] is True
+          assert report['estimated_slam']=='NOT_TESTED'
+          print('FACTORIAL_GT_EVALUATION_COMPUTED_NOT_AUTOMATIC_ACCURACY_PASS')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: yoloe26x-four-hypotheses-${{ matrix.scene }}
+          path: |
+            results/yoloe26x_${{ matrix.scene }}/factorial_results.json
+            results/yoloe26x_${{ matrix.scene }}/raw.json.gz
+            results/yoloe26x_${{ matrix.scene }}/oracle_all.json.gz
+            yoloe26x_factorial.log
+          retention-days: 30
+          if-no-files-found: warn
