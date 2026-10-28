@@ -1,0 +1,62 @@
+name: Full RGB-D geometric reconstruction acceptance
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - src/semantic_map/offline_mapping.py
+      - .github/workflows/full-geometric-mapping.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-geometric-map:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      OMP_NUM_THREADS: "3"
+      OPENBLAS_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install geometry backend
+        run: |
+          python -m pip install -e '.[test]'
+          python -m pip install 'open3d>=0.18,<0.21'
+      - name: Full synchronized RGB-D TSDF and ray-carved occupancy
+        run: |
+          set -euo pipefail
+          python -u -m semantic_map.offline_mapping \
+             --dataset "$RUNNER_TEMP/tum" \
+             --output results/full_geometry \
+             --max-frames 0 \
+             --voxel 0.06 \
+             --occupancy-voxel 0.12 \
+             --tsdf-side 320 \
+             --ray-stride 20 | tee full_geometry.log
+      - name: Machine-readable geometric acceptance (not SLAM/identity)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('results/full_geometry/mapping_report.json')
+          j=json.loads(p.read_text())
+          assert j['geometric_mapping_status']=='PASS',j
+          assert j['frames_integrated']>=500,j
+          assert j['mesh_triangles']>0 and j['occupied_3d_voxels']>0,j
+          assert j['pose_estimation_status']=='NOT_TESTED'
+          assert j['loop_closure_status']=='NOT_TESTED'
+          assert j['object_identity_status']=='NOT_ACCEPTED'
+          print('GEOMETRY_ONLY_ACCEPTED',j['frames_integrated'],j['mesh_triangles'])
+          PY
+      - name: Artifacts and failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-rgbd-geometry-candidate
+          path: |
+            results/full_geometry/
+            full_geometry.log
+          retention-days: 30
+          if-no-files-found: warn
