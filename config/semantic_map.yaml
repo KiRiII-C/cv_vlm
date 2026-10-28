@@ -1,0 +1,23 @@
+# Offline mapping defaults, to be calibrated on held-out sequences.
+geometry:
+  depth_min_m: 0.2
+  depth_max_m: 8.0
+  voxel_size_m: 0.05
+  min_object_support_pixels: 25
+association:
+  min_track_observations: 2
+  min_match_score: 0.68
+  ambiguity_margin: 0.10
+  auto_merge_duplicates: false
+  persistent_identity_across_sessions: true
+  same_map_coordinate_frame_required: true
+semantics:
+  infer_descriptions_on_confirmed_tracks: true
+  preserve_observation_provenance: true
+  open_vocabulary_segmentation: future_plugin
+  feature_encoder: future_plugin
+mapping:
+  slam: rtabmap_ros
+  pose_graph_reprojection_required: true
+  representation: surface_voxels_prototype
+  occupancy_for_nav2: future_rtabmap_export
