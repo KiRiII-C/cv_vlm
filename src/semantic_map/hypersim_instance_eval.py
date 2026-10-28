@@ -62,17 +62,17 @@ def evaluate_identity(observations,total_gt):
         'false_split_gt_objects':sum(len(v)>1 for v in ids_for_gt.values()),
         'false_merge_predicted_ids':sum(len(v)>1 for v in gts_for_id.values()),
         'unassigned_observations':int(sum(b is None for a,b in observations)),
-        'warning':'Oracle mode uses true GT instance masks and semantic classes, but ID mapping is predicted.'}
+        'warning':'Oracle mode uses GT masks/classes; predicted mode uses pretrained YOLO masks. All modes use GT world positions. Physical ID metrics are computed using GT only in scoring, with missed detections penalized.'}
 
 def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
-        mode='oracle_masks',max_objects=36):
+        mode='oracle_masks',max_objects=36,model_name='yolo11n-seg.pt',confidence=.25):
     out=Path(out);out.mkdir(exist_ok=True,parents=True)
     from PIL import Image
     remote,z=open_scene()
     detector=None
     if mode=='predicted_yolo_masks':
         from ultralytics import YOLO
-        detector=YOLO('yolo11n-seg.pt')
+        detector=YOLO(model_name)
     elif mode!='oracle_masks':raise ValueError('Unknown mode '+mode)
     store=MemoryStore(out/'memory.sqlite')
     mapper=SemanticMapper(store,min_hits=2)
@@ -112,7 +112,7 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
                        label=f'gt_semantic_{category}',confidence=1.,source=mode)
                     if o is not None:observations.append(o);physical_ids.append(uid)
             else:
-                result=detector.predict(im,conf=.25,imgsz=640,device='cpu',retina_masks=True,verbose=False)[0]
+                result=detector.predict(im,conf=confidence,imgsz=640,device='cpu',retina_masks=True,verbose=False)[0]
                 if result.masks is not None:
                     masks=result.masks.data.cpu().numpy();classes=result.boxes.cls.int().cpu().tolist()
                     probs=result.boxes.conf.cpu().tolist()
@@ -142,7 +142,11 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
             for uid in ids:gt_appearances[uid].append(k)
         return_after_gap=[uid for uid,times in gt_appearances.items()
                           if any(b-a>=4 for a,b in zip(times[:-1],times[1:]))]
-        stats.update({'status':'PHYSICAL_INSTANCE_GT_EVALUATION',
+        stats.update({'unique_GT_visible_objects_all_frames':len(gt_appearances),
+            'unique_GT_objects_detected_in_observations':len({a for a,b in evidence if a is not None}),
+            'detector_model':model_name if mode=='predicted_yolo_masks' else 'ORACLE_GT_MASKS',
+            'detector_confidence':confidence if mode=='predicted_yolo_masks' else None,
+            'status':'PHYSICAL_INSTANCE_GT_EVALUATION',
             'mode':mode,'scene':'ai_001_001','metric_world_scale':scale,
             'gt_is_physically_stable_across_frames':True,
             'used_actual_rgb_in_oracle_appearance':True,
@@ -165,7 +169,9 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument('--out',default='results/hypersim_physical_ids')
     p.add_argument('--mode',choices=['oracle_masks','predicted_yolo_masks'],default='oracle_masks')
+    p.add_argument('--model',default='yolo11n-seg.pt')
+    p.add_argument('--conf',type=float,default=.25)
     a=p.parse_args()
-    run(a.out,mode=a.mode)
+    run(a.out,mode=a.mode,model_name=a.model,confidence=a.conf)
 
 if __name__=='__main__':main()
