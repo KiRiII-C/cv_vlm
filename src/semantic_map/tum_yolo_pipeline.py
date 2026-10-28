@@ -14,6 +14,8 @@ from .storage import MemoryStore
 from .engine import SemanticMapper
 from .pointmap import SurfaceVoxelMap
 from .instance_cloud import InstanceCloud
+from .object_memory_v2 import ObjectMemoryV2
+from .object_surface_memory_v2 import ObjectSurfaceMemoryV2
 
 K=Intrinsics(517.3,516.5,318.6,255.3,640,480,depth_unit_m=1/5000)
 
@@ -88,7 +90,8 @@ def hsv_feature(rgb,mask):
 
 def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yoloe-26s-seg.pt',
                     confidence=.27,max_frames=0,voxel=.07,pose_json=None,device='cpu',
-                    classes_json=None,temporal_tracking=True,appearance_mode='hsv_spatial'):
+                    classes_json=None,temporal_tracking=True,appearance_mode='hsv_spatial',
+                    memory_engine='legacy',persist_object_surfaces=False):
     from .yoloe26_detector import build_detector,class_list
     from .temporal_tracker import TemporalTracker,Detection
     from .reid_features import AppearanceEncoder
@@ -109,12 +112,16 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
     tracker=TemporalTracker(high_thresh=confidence,low_thresh=min(.10,confidence*.55),
                             max_lost=40) if temporal_tracking else None
     mem=MemoryStore(output/'semantic_memory.sqlite')
-    mapping=SemanticMapper(mem,min_hits=2,association_mode='multiview' if temporal_tracking else 'fused')
+    if memory_engine not in ('legacy','v2'):raise ValueError('Unrecognized memory engine')
+    mapping=(ObjectMemoryV2(mem,min_hits=2) if memory_engine=='v2' else
+             SemanticMapper(mem,min_hits=2,association_mode='multiview' if temporal_tracking else 'fused'))
+    object_surfaces=ObjectSurfaceMemoryV2(mem.db,voxel_m=.015,minimum_support=2) if persist_object_surfaces else None
     vox=SurfaceVoxelMap(output/'surface_voxels.sqlite',voxel_m=voxel)
     dense_instances=InstanceCloud(voxel_m=.015,stride=3)
     reports=[];evidence=[];stats={'frames':len(pairs),'detections':0,'invalid_masks':0,'labels':{},'statuses':{},
         'model':model_name,'configured_classes':configured_classes,
         'appearance_mode':appearance_mode,'temporal_enabled':bool(temporal_tracking),
+        'memory_engine':memory_engine,'persistent_surface_evidence':bool(persist_object_surfaces),
         'temporal_statuses':{},'short_to_global_conflicts':0}
     colors={'chair':'#f58518','dining table':'#4c78a8','tv':'#54a24b'}
     for i,(stamp,rgbname,depthname,T) in enumerate(pairs):
@@ -201,6 +208,10 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
         for accepted_mask,decision in zip(accepted_masks,decisions):
             if decision.object_id and decision.status not in ('ambiguous','unresolved','unassigned_conflict','duplicate_detection'):
                 dense_instances.add(decision.object_id,accepted_mask,depth,K,T)
+                if object_surfaces is not None:
+                    object_surfaces.integrate_mask(decision.object_id,depth,accepted_mask,rgb,K,T,
+                        source='tum_freiburg1_desk',frame_id=str(stamp),
+                        map_id='default',timestamp=stamp,pixel_stride=3)
         if i%30==0:
             viewdir=output/'object_views'
             viewdir.mkdir(exist_ok=True)
@@ -227,6 +238,14 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
     dense_meta=dense_instances.export(output/'object_instances_colored.ply',
                 track_filter={t.object_id for t in confirmed})
     stats['dense_colored_instance_map']=dense_meta
+    if object_surfaces is not None:
+        stats['persistent_instance_surface_map']=object_surfaces.export(
+            output/'persistent_object_surfaces_colored.ply')
+    if memory_engine=='v2':
+        stats['object_memory_v2']={'confirmed_query':mapping.query_memory(),
+            'review_queue_count':len(mapping.review_queue()),
+            'nearby_relationships':mapping.nearby_graph(radius=2.)['edges'],
+            'proposed_duplicate_merges':mapping.propose_duplicate_merges()}
     stats.update({'total_tracks':len(tracks),'confirmed_tracks':len(confirmed),
                   'tracks_reobserved_10plus':sum(t.hits>=10 for t in tracks),
                   'identity_gt_available':False,
@@ -256,9 +275,12 @@ def main():
     p.add_argument('--pose-json',default=None);p.add_argument('--device',default='cpu')
     p.add_argument('--appearance',choices=['hsv_spatial','mobilenetv3'],default='hsv_spatial')
     p.add_argument('--disable-temporal-tracking',action='store_true')
+    p.add_argument('--memory-engine',choices=['legacy','v2'],default='v2')
+    p.add_argument('--persist-object-surfaces',action='store_true')
     a=p.parse_args()
     infer_benchmark(a.data,a.output,a.model,a.conf,a.max_frames,pose_json=a.pose_json,
                     device=a.device,classes_json=a.classes_json,
                     temporal_tracking=not a.disable_temporal_tracking,
-                    appearance_mode=a.appearance)
+                    appearance_mode=a.appearance,memory_engine=a.memory_engine,
+                    persist_object_surfaces=a.persist_object_surfaces)
 if __name__=='__main__':main()
