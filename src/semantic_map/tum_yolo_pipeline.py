@@ -109,7 +109,7 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
         if rgb is None or depth is None or rgb.shape[:2]!=depth.shape:raise ValueError('Invalid TUM frame')
         vox.add_frame(depth,K,T,'tum_freiburg1_desk',str(stamp),stride=8)
         result=det.predict(source=rgb,conf=confidence,retina_masks=True,verbose=False,device='cpu',imgsz=640)[0]
-        observations=[];display=rgb.copy()
+        observations=[];view_rects=[];display=rgb.copy()
         if result.masks is not None and result.boxes is not None:
             masks=result.masks.data.cpu().numpy();ids=result.boxes.cls.int().cpu().tolist()
             scores=result.boxes.conf.cpu().tolist()
@@ -131,6 +131,8 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
                 if obs is None:stats['invalid_masks']+=1;continue
                 stats['detections']+=1;stats['labels'][label]=stats['labels'].get(label,0)+1
                 observations.append(obs)
+                yy,xx=np.where(mask)
+                view_rects.append((int(xx.min()),int(yy.min()),int(xx.max()),int(yy.max())))
                 if i%60==0:
                     contours,_=cv2.findContours(mask.astype('uint8'),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
                     cv2.drawContours(display,contours,-1,(0,210,240),2)
@@ -142,6 +144,20 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
                           'timestamp':o.timestamp,'appearance':o.appearance.tolist() if o.appearance is not None else None,
                           'description':o.description,'confidence':o.confidence} for o in observations])
         decisions=mapping.process_frame(observations)
+        if i%30==0:
+            viewdir=output/'object_views'
+            viewdir.mkdir(exist_ok=True)
+            for rect,dec in zip(view_rects,decisions):
+                if not dec.object_id or dec.status not in ('confirmed','matched','tentative'):
+                    continue
+                if len(list(viewdir.glob(dec.object_id+'_*.jpg')))>=3:
+                    continue
+                x0,y0,x1,y1=rect
+                pad=12
+                crop=rgb[max(y0-pad,0):min(y1+pad+1,480),
+                         max(x0-pad,0):min(x1+pad+1,640)]
+                if crop.shape[0]>=28 and crop.shape[1]>=28:
+                    cv2.imwrite(str(viewdir/f'{dec.object_id}_{i:04}.jpg'),crop)
         for dec in decisions:stats['statuses'][dec.status]=stats['statuses'].get(dec.status,0)+1
         reports.append({'frame':i,'timestamp':stamp,'detections':len(observations),
                         'associations':[d.__dict__ for d in decisions]})
