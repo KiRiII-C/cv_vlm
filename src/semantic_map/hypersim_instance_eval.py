@@ -13,7 +13,6 @@ import argparse,csv,io,json
 from collections import Counter,defaultdict
 from pathlib import Path
 import cv2,numpy as np
-from PIL import Image
 from scipy.optimize import linear_sum_assignment
 from .hypersim_range import open_scene,hdf5_array
 from .models import Observation
@@ -68,6 +67,7 @@ def evaluate_identity(observations,total_gt):
 def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
         mode='oracle_masks',max_objects=36):
     out=Path(out);out.mkdir(exist_ok=True,parents=True)
+    from PIL import Image
     remote,z=open_scene()
     detector=None
     if mode=='predicted_yolo_masks':
