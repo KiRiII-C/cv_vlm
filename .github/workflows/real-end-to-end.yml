@@ -48,6 +48,8 @@ jobs:
             --data "$RUNNER_TEMP/tum" --output results/tum_real \
             --model yolo11n-seg.pt --max-frames 0 \
             --pose-json results/vo_mapping/optimized_poses.json | tee semantic.log
+          python -m semantic_map.visualize_real --root results/tum_real
+          python -m semantic_map.replay_ablation --root results/tum_real
       - name: Ground real operator commands in real object map and occupancy evidence
         run: |
           set -o pipefail
