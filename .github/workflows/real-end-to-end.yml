@@ -5,6 +5,8 @@ on:
     paths:
       - src/semantic_map/operator_e2e.py
       - src/semantic_map/tum_yolo_pipeline.py
+      - src/semantic_map/instance_cloud.py
+      - src/semantic_map/dense_scene_viz.py
       - src/semantic_map/vlm_enrich.py
       - src/semantic_map/floor_alignment.py
       - src/semantic_map/offline_reconcile.py
@@ -48,7 +50,7 @@ jobs:
           set -o pipefail
           python -u -m semantic_map.offline_mapping \
             --dataset "$RUNNER_TEMP/tum" --output results/full_geometry \
-            --max-frames 0 --voxel .06 --tsdf-side 320 \
+            --max-frames 0 --voxel .03 --tsdf-side 640 --ray-stride 12 \
             --pose-json results/vo_mapping/optimized_poses.json | tee geometry.log
       - name: Gravity-aligned 2D free/occupied map from reconstructed RGB-D geometry
         run: |
@@ -65,6 +67,7 @@ jobs:
             --db results/tum_real/semantic_memory.sqlite \
             --out results/tum_real/reconciliation.json | tee reconciliation.log
           python -m semantic_map.visualize_real --root results/tum_real
+          python -m semantic_map.dense_scene_viz --geometry results/full_geometry --semantics results/tum_real --out results/dense_semantic_viz
           python -m semantic_map.replay_ablation --root results/tum_real
           python -m semantic_map.identity_audit --root results/tum_real --out results/tum_real/identity_audit.json
       - name: Compact VLM descriptions of real RGB object crops, persist checked semantics
@@ -103,6 +106,10 @@ jobs:
           assert g['frames_integrated']>=500
           assert g['mesh_vertices']>=5000 and g['mesh_triangles']>=7500
           assert m['detections']>=100 and m['confirmed_tracks']>0
+          dense=json.load(open('results/dense_semantic_viz/dense_summary.json'))
+          assert dense['colored_foreground_points']>=2000,dense
+          assert dense['colored_ids']>=3,dense
+          assert dense['tsdf_surface_points']>=5000,dense
           audit=json.load(open('results/tum_real/identity_audit.json'))
           assert audit['status']=='PROXY_DIAGNOSTIC_NOT_PHYSICAL_GROUND_TRUTH'
           assert audit['frames']==m['frames']
@@ -127,6 +134,7 @@ jobs:
             results/full_geometry/
             results/gravity_map/
             results/tum_real/
+            results/dense_semantic_viz/
             results/operator_e2e/
             results/vlm_semantics/
             vo.log
