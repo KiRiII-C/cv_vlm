@@ -11,14 +11,14 @@
     },
     "slam_pose_graph": {
       "status": "IMPLEMENTED_UNVALIDATED",
-      "evidence": "ORB+depth PnP 596/596; 9 nonlocal loop constraints; sparse SE3 optimization ATE RMSE 0.05498 m, RPE@30 0.04777 m; single TUM fr1_desk sequence only",
+      "evidence": "Independent ORB + RGB-D PnP 596 frames, 9 verified nonlocal constraints; optimized SE3 pose-graph ATE RMSE 0.05498m, RPE@30 0.04777m on TUM fr1_desk. Custom VO, not RTAB-Map.",
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40708907904",
       "not_yet": "Multi-sequence accuracy and physical robot localization"
     },
     "tsdf_reconstruction": {
       "status": "IMPLEMENTED_UNVALIDATED",
-      "evidence": "Pinned Open3D 0.19 fixes 0.20 regression; 596 frames produces 11001/19683 vertices/faces with GT and 26807/48475 with optimized VO; independent 3D surface accuracy not scored",
-      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40708907904",
+      "evidence": "Open3D 0.19 full 596-frame TSDF 11,478 vertices / 20,532 faces using estimated corrected poses; cross-validation: train 298 even frames, test 298 odd frames, 468,722 depth points, median NN 0.03103 m, coverage@10cm 0.983997. Same-scene holdout, NOT independent GT geometry.",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40746269127",
       "not_yet": "Independent surface accuracy evaluation"
     },
     "occupancy_navigation_ready": {
@@ -34,12 +34,42 @@
       "evidence": "No completed correction/reassociation"
     },
     "semantic_vlm": {
-      "status": "NOT_TESTED",
-      "evidence": "No real VLM evaluation"
+      "status": "IMPLEMENTED_UNVALIDATED",
+      "evidence": "Real SmolVLM-256M-Instruct inference on six selected object views; nonempty descriptions, two descriptions rejected by consistency check. No independent semantic groundtruth.",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40713659539"
     },
     "nav2_integration": {
       "status": "NOT_TESTED",
       "evidence": "Only simulated A*"
+    }
+  },
+  "validated_subsystem_checks": {
+    "rgbd_vo_pose_graph_single_sequence": {
+      "status": "PASS",
+      "scene": "TUM fr1_desk",
+      "ate_rmse_m": 0.05498365,
+      "rpe_30frame_rmse_m": 0.04776568,
+      "nonlocal_loop_constraints": 9,
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40713659539"
+    },
+    "tsdf_odd_frame_surface_consistency": {
+      "status": "PASS",
+      "scene": "TUM fr1_desk",
+      "training_frames": 298,
+      "withheld_frames": 298,
+      "evaluation_depth_points": 468722,
+      "median_nearest_surface_m": 0.03102627,
+      "coverage_within_10cm": 0.98399691,
+      "scope": "same-sequence withheld depth frames, not independent scene GT",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40746269127"
+    },
+    "real_semantic_pipeline_smoke": {
+      "status": "PASS",
+      "frames": 596,
+      "valid_masks": 2541,
+      "source": "yolo11n-seg pretrained; SmolVLM on selected views",
+      "scope": "technical integration only; physical ID not validated",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40713659539"
     }
   }
 }
