@@ -18,7 +18,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [oracle_masks, predicted_yolo_masks]
+        include:
+          - name: oracle
+            mode: oracle_masks
+            model: yolo11n-seg.pt
+            conf: 0.25
+          - name: yolo_n
+            mode: predicted_yolo_masks
+            model: yolo11n-seg.pt
+            conf: 0.25
+          - name: yolo_s_recall
+            mode: predicted_yolo_masks
+            model: yolo11s-seg.pt
+            conf: 0.15
     env:
       OMP_NUM_THREADS: '3'
       OPENBLAS_NUM_THREADS: '2'
@@ -37,7 +49,7 @@ jobs:
         run: |
           set -o pipefail
           python -u -m semantic_map.hypersim_instance_eval \
-            --mode ${{ matrix.mode }} --out results/hypersim_${{ matrix.mode }} | tee hypersim_eval.log
+            --mode ${{ matrix.mode }} --model ${{ matrix.model }} --conf ${{ matrix.conf }} --out results/hypersim_${{ matrix.name }} | tee hypersim_eval.log
       - name: Check that GT physical IDs rather than semantic class labels were used
         run: |
           python - <<'PY'
@@ -54,7 +66,7 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hypersim-physical-id-${{ matrix.mode }}
+          name: hypersim-physical-id-${{ matrix.name }}
           path: |
             results/hypersim_${{ matrix.mode }}/
             hypersim_eval.log
