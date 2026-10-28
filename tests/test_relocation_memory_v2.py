@@ -68,3 +68,13 @@ def test_far_identical_chairs_no_pure_appearance_relocation(tmp_path):
     assert candidate.object_id is None
     assert candidate.status in ('AMBIGUOUS_SIMILAR_OLD_OBJECTS','NO_DISTINCTIVE_RELOCATION')
     db.close()
+
+def test_same_camera_view_cannot_fake_two_independent_vacancies(tmp_path):
+    db,mem,r,uid=make(tmp_path)
+    for frame in (10,11,12):
+        r.observe_candidate(observation(frame,1.3,[.97,.243,0]))
+    r.note_verified_old_region_empty(uid,source='depth',frame_id='20',proof=proof(20))
+    r.note_verified_old_region_empty(uid,source='depth',frame_id='21',proof=dict(proof(20)))
+    assert r._old_free_views(mem.store.tracks()[0])==1
+    assert r.observe_candidate(observation(12,1.3,[.97,.243,0])).object_id is None
+    db.close()
