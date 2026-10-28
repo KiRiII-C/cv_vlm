@@ -280,6 +280,35 @@
       },
       "false_merge_tradeoff": "Crowded scene 8 merges at 0.10 confidence; 0 at 0.35, but IDF1 collapses 0.192->0.038. Lower confidence requires stricter memory gates; threshold alone inadequate.",
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40770506902"
+    },
+    "yoloe26x_tum_40frame_memory_smoke": {
+      "status": "PASS",
+      "model": "yoloe-26x-seg.pt",
+      "frames": 40,
+      "model_3d_observations": 398,
+      "confirmed_track_candidates": 24,
+      "colored_mask_3d_points": 20112,
+      "per_instance_voxel_m": 0.015,
+      "temporal_global_id_conflicts": 8,
+      "uses_reference_camera_pose": true,
+      "physical_gt_ids": "NOT_AVAILABLE",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40770733315",
+      "limits": "Functional smoke with actual YOLOE26x and ObjectMemoryV2; not a physical-ID accuracy acceptance."
+    },
+    "yoloe26x_frozen_3d_spatial_reid_gate_grid": {
+      "status": "PASS",
+      "meaning": "12 hyperparameter sensitivity runs completed and compared against exact original baseline",
+      "source_detector": "yoloe-26x-seg.pt",
+      "radius_m_baseline": 0.45,
+      "baseline_diverse_IDF1": 0.398576512455516,
+      "baseline_crowded_IDF1": 0.19174434087882822,
+      "baseline_crowded_false_merges": 8,
+      "radius_m_example": 0.35,
+      "radius035_diverse_IDF1": 0.3957597173144876,
+      "radius035_crowded_IDF1": 0.1928665785997358,
+      "radius035_crowded_false_merges": 6,
+      "conclusion": "Narrower radius slightly reduces false mergers but does not yield robust across-scene improvement; DO NOT AUTO APPLY without independent test.",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40771107918"
     }
   }
 }
