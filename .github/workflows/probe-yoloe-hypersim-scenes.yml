@@ -1,0 +1,25 @@
+name: Find Hypersim scenes with multiple YOLOE-26 target physical instances
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths: [.github/workflows/probe-yoloe-hypersim-scenes.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  physical-scene-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: pip install numpy h5py requests
+      - run: python -u scripts/probe_hypersim_target_scenes.py | tee hypersim_scene_probe.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hypersim-scenes-with-evaluable-target-classes
+          path: |
+            results/hypersim_scene_selection.json
+            hypersim_scene_probe.log
+          if-no-files-found: warn
