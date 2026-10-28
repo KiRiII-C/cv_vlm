@@ -61,6 +61,7 @@ jobs:
           assert j['gt_observations']>20,j
           assert 0<=j['IDF1_observation_level']<=1,j
           assert j['gt_objects_reappearing_after_sampled_gap']>0,j
+          assert j['unique_GT_visible_objects_all_frames']>=20,j
           print('TRUE_PHYSICAL_INSTANCE_GT_MEASUREMENT_COMPLETE')
           PY
       - if: always()
@@ -68,7 +69,7 @@ jobs:
         with:
           name: hypersim-physical-id-${{ matrix.name }}
           path: |
-            results/hypersim_${{ matrix.mode }}/
+            results/hypersim_${{ matrix.name }}/
             hypersim_eval.log
           retention-days: 30
           if-no-files-found: warn
