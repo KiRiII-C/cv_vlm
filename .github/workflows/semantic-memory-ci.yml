@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/semantic_map/**'
       - 'tests/**'
+      - 'scripts/run_offline_e2e.sh'
       - 'pyproject.toml'
       - '.github/workflows/semantic-memory-ci.yml'
   workflow_dispatch:
@@ -21,6 +22,8 @@ jobs:
           python-version: '3.11'
       - name: Install baseline
         run: python -m pip install -e '.[test]'
+      - name: Validate local end-to-end bash command syntax
+        run: bash -n scripts/run_offline_e2e.sh
       - name: Validate persistence, re-identification, geometry and ambiguous matching
         run: pytest -q tests/
       - name: Re-entry simulation using RGB-D backprojection
