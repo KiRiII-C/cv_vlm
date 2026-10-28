@@ -126,3 +126,39 @@ Research methodology and the verified focused bibliography are in `docs/research
 - See `results/project_report.html`, `results/tum_real/real_map_interactive.html`, and `docs/research_2026.md`.
 
 **Scientific status:** full object uniqueness, learned VLM/Cross-Attention, loop-closure reconciliation and on-robot Nav2 have **not** passed real-world validation.
+
+
+## One-command offline RGB-D end-to-end (Ubuntu 24.04)
+
+Dependencies (CPU by default, CUDA optional for YOLO on a local RTX):
+~~~bash
+sudo apt-get install -y libegl1 libgl1 libgomp1
+python3.11 -m pip install -e '.[test]' 'open3d==0.19.0' ultralytics matplotlib plotly 'transformers>=4.55,<6' pillow
+bash scripts/run_offline_e2e.sh
+~~~
+
+To use CUDA for YOLO, set YOLO_DEVICE=0. Maps, trajectory, object memories,
+semantic descriptions and operator command results are saved in
+results/offline_full/ (override OUTPUT_DIR). The frame source is the public
+TUM fr1_desk sequence, with benchmark ground-truth ONLY for final pose
+evaluation, not pose estimation.
+
+**Latest independently reproduced scoped results (2026-10-28):**
+- 596 RGB-D frames, 9 nonlocal pose constraints; custom ORB+PnP posegraph
+  ATE RMSE 0.05498 m, RPE@30 0.04777 m. [E2E run](https://github.com/KiRiII-C/cv_vlm/actions/runs/40748057181).
+- 298 training RGB-D frames -> TSDF; 298 withheld frames:
+  468,722 depth points, median depth-to-map distance 0.03103 m,
+  coverage <=0.10m 98.40%. [Holdout CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/40746269127).
+- 2,541 real pretrained YOLO instance observations in persistent SQLite;
+  54 confirmed tracks, **not proven 54 physical identities**.
+- Real SmolVLM-256M inference on 24 confirmed object proposals
+  (up to 2 views each): 12 lexically consistent descriptions, 12 quarantined.
+- Actual ROS2 Jazzy Nav2 ComputePathToPose action on reconstructed
+  offline occupancy: SUCCEEDED, 30 poses to object UUID. [Nav2 CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/40748419765).
+
+**Not accepted:** cross-scene physical identity persistence without duplicates,
+GT instance-ID accuracy, real robot localization and navigation, independent
+multi-scene surface reconstruction GT accuracy, RTAB-Map integration. The
+custom VO is not RTAB-Map. See docs/acceptance_status.md and
+config/acceptance.json; a green technical CI is NOT full project acceptance.
+
