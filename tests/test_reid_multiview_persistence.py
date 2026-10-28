@@ -15,7 +15,7 @@ def test_multiview_gallery_survives_database_restart(tmp_path):
     db=MemoryStore(path)
     engine=SemanticMapper(db,association_mode="multiview")
     a=engine.process_frame([obs(0,"A",[0,0,1])])[0].object_id
-    b=engine.process_frame([obs(1,"A",[.01,0,1],feature=(0,1,0))])[0]
+    b=engine.process_frame([obs(1,"A",[.01,0,1],feature=(0.6,0.8,0))])[0]
     assert b.object_id==a
     gallery=db.tracks()[0].attributes.get("visual_gallery",[])
     assert len(gallery)==2
