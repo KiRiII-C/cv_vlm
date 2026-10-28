@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.11'}
-      - run: pip install numpy h5py requests
+      - run: python -m pip install -e '.[test]' h5py requests
       - run: python -u scripts/probe_hypersim_target_scenes.py | tee hypersim_scene_probe.log
       - uses: actions/upload-artifact@v4
         if: always()
