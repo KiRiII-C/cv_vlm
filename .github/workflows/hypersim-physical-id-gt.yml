@@ -1,0 +1,62 @@
+name: Hypersim true physical instance reidentification GT
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - '.github/workflows/hypersim-physical-id-gt.yml'
+      - 'src/semantic_map/hypersim_instance_eval.py'
+      - 'src/semantic_map/hypersim_range.py'
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: hypersim-physical-id-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  physical-instance-gt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [oracle_masks, predicted_yolo_masks]
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install physical GT evaluator and real pretrained YOLO
+        run: |
+          python -m pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' ultralytics h5py requests pillow
+      - name: Unit test physical-ID scoring and true GT extraction
+        run: python -m pytest -q tests/test_hypersim_physical_identity.py
+      - name: Evaluate same physical 3D instance IDs after disappearance and revisit
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.hypersim_instance_eval \
+            --mode ${{ matrix.mode }} --out results/hypersim_${{ matrix.mode }} | tee hypersim_eval.log
+      - name: Check that GT physical IDs rather than semantic class labels were used
+        run: |
+          python - <<'PY'
+          import json,glob
+          j=json.load(open(glob.glob('results/hypersim_*/hypersim_physical_id_gt.json')[0]))
+          assert j['status']=='PHYSICAL_INSTANCE_GT_EVALUATION'
+          assert j['physical_gt_id_evaluation']=='YES'
+          assert j['frames_evaluated']>=10,j
+          assert j['gt_observations']>20,j
+          assert 0<=j['IDF1_observation_level']<=1,j
+          assert j['gt_objects_reappearing_after_sampled_gap']>0,j
+          print('TRUE_PHYSICAL_INSTANCE_GT_MEASUREMENT_COMPLETE')
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hypersim-physical-id-${{ matrix.mode }}
+          path: |
+            results/hypersim_${{ matrix.mode }}/
+            hypersim_eval.log
+          retention-days: 30
+          if-no-files-found: warn
