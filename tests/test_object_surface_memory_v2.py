@@ -52,3 +52,30 @@ def test_bad_calibration_and_depth_rejected(tmp_path):
  with pytest.raises(ValueError):store.integrate_mask('a',dep,mask[:5],rgb,K(),np.eye(4),source='s',frame_id='0')
  with pytest.raises(ValueError):store.refute_visible_cells('a',np.ones((3,2)))
  db.close()
+
+
+def test_stale_surface_after_pose_graph_correction_requires_full_replay(tmp_path):
+    from semantic_map.storage import MemoryStore
+    from semantic_map.models import Track
+    import numpy as np, pytest
+    db=MemoryStore(tmp_path/'memory.sqlite')
+    surface=ObjectSurfaceMemoryV2(db.db,.02,minimum_support=1)
+    t=Track(object_id='obj_confirmed',label='chair',center=np.array([0.,0.,1.]),
+      low=np.array([-.2,-.2,.8]),high=np.array([.2,.2,1.2]),appearance=None,
+      hits=3,first_seen=0.,last_seen=1.,state='confirmed',map_version=0)
+    db.upsert_track(t);db.db.commit()
+    dep,mask,rgb=fixture()
+    surface.integrate_mask(t.object_id,dep,mask,rgb,K(),np.eye(4),
+                           source='s',frame_id='1',pixel_stride=1,pose_version=0)
+    assert surface.export(tmp_path/'original.ply')['vertices']>0
+    t.map_version=1;db.upsert_track(t);db.db.commit()
+    with pytest.raises(RuntimeError,match='Stale'):
+        surface.export(tmp_path/'stale.ply')
+    surface.reset_for_pose_rebuild()
+    assert surface.integrate_mask(t.object_id,dep,mask,rgb,K(),np.eye(4),
+                                  source='s',frame_id='1',pixel_stride=1,pose_version=1)>0
+    assert surface.export(tmp_path/'reconstructed.ply')['pose_graph_versions_observed']==[1]
+    with pytest.raises(RuntimeError,match='another pose-graph version'):
+        surface.integrate_mask(t.object_id,dep,mask,rgb,K(),np.eye(4),
+                               source='s',frame_id='2',pixel_stride=1,pose_version=0)
+    db.close()
