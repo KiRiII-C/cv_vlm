@@ -1,0 +1,55 @@
+name: YOLOE26x 3D ReID spatial-gate ablation on frozen masks
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/yoloe26x-reid-gates.yml
+      - src/semantic_map/yoloe26x_reid_gate_sweep.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  radius-ambiguity-grid:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[test]'
+      - name: Fetch source 26x physical GT detector masks without invoking model or modifying data
+        uses: actions/download-artifact@v4
+        with:
+          pattern: yoloe26x-four-hypotheses-*
+          run-id: 40769982699
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          merge-multiple: true
+          path: source
+      - name: 3D geometry-only hard gate sweeps; assert actual baseline IDF1 is reproducible
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.yoloe26x_reid_gate_sweep \
+            --diverse source/results/yoloe26x_ai_002_001/raw.json.gz \
+            --crowded source/results/yoloe26x_ai_005_001/raw.json.gz \
+            --out results/yoloe26x_reid_gate_sweep.json | tee gate_sweep.log
+      - name: Report quantified outcomes but do not auto-apply tuned parameters
+        run: |
+          python - <<'PY'
+          import json
+          j=json.load(open('results/yoloe26x_reid_gate_sweep.json'))
+          assert j['GT_identity_as_model_input'] is False
+          assert len(j['variants'])==12
+          print('REID_GEOMETRIC_GATE_ABLATION_COMPLETED_NOT_PRODUCTION_ACCEPTED')
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoloe26x-frozen-GT-reid-radius-grid
+          path: |
+            results/yoloe26x_reid_gate_sweep.json
+            gate_sweep.log
+          retention-days: 30
+          if-no-files-found: warn
