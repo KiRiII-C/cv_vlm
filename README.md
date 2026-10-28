@@ -52,7 +52,7 @@ Docker is optional for CI; the main Python core works without ROS.
 ```json
 {
   "source":"tum_freiburg1_room", "frame_id":"123.450", "timestamp":123.45,
-  "map_version":0,
+  "map_id":"tum_room_map_01", "map_version":0,
   "camera":{"fx":525,"fy":525,"cx":319.5,"cy":239.5,
             "width":640,"height":480,"depth_unit_m":0.0002},
   "depth_path":"frames/depth/123.png",

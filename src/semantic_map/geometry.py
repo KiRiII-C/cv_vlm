@@ -45,7 +45,7 @@ def masked_pointcloud(depth, mask, K: Intrinsics, T_map_cam, min_m=0.2, max_m=8.
 
 def make_observation(depth, mask, K: Intrinsics, T_map_cam, *, source, frame_id,
                      detection_id, label, timestamp, appearance=None, description="",
-                     confidence=1.0, map_version=0, min_support=25):
+                     confidence=1.0, map_version=0, map_id="default", min_support=25):
     points = masked_pointcloud(depth,mask,K,T_map_cam)
     if len(points)<min_support:
         return None
@@ -57,4 +57,4 @@ def make_observation(depth, mask, K: Intrinsics, T_map_cam, *, source, frame_id,
     return Observation(source=source,frame_id=str(frame_id),detection_id=str(detection_id),
                        label=label,center=center,low=low,high=high,timestamp=float(timestamp),
                        appearance=appearance,description=description,confidence=confidence,
-                       map_version=map_version)
+                       map_version=map_version,map_id=map_id)

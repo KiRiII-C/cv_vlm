@@ -16,7 +16,7 @@ def score(track,obs):
     """
     if track.label.lower().strip()!=obs.label.lower().strip():
         return None
-    if track.map_version!=obs.map_version:
+    if track.map_id!=obs.map_id or track.map_version!=obs.map_version:
         return None  # pose-graph corrections must reproject old tracks first
     delta=float(np.linalg.norm(track.center-obs.center))
     extent=np.linalg.norm(np.maximum(track.high-track.low,obs.high-obs.low))

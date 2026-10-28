@@ -3,10 +3,10 @@ import pytest
 from semantic_map import Observation, MemoryStore, SemanticMapper
 
 
-def obs(frame, det='chair', label='chair', x=1.0,app=None,source='bag1',version=0):
+def obs(frame, det='chair', label='chair', x=1.0,app=None,source='bag1',version=0,map_id='map1'):
     return Observation(source=source,frame_id=str(frame),detection_id=det,
         label=label,center=[x,0,1.5],low=[x-.2,-.2,1.3],high=[x+.2,.2,1.7],
-        timestamp=float(frame),appearance=app,map_version=version)
+        timestamp=float(frame),appearance=app,map_version=version,map_id=map_id)
 
 
 def test_reidentify_after_disappearance_and_restart(tmp_path):
@@ -87,9 +87,10 @@ def test_conflict_same_object_twice_in_one_frame(tmp_path):
     first=m.process_frame([obs(1,app=[1,0])])[0]
     result=m.process_frame([obs(2,det='a',app=[1,0]),obs(2,det='b',app=[1,0])])
     ids=[v.object_id for v in result if v.object_id==first.object_id]
-    assert len(ids)==1
+    assert len(ids)==2  # duplicate mask is linked to the same object
     assert len(db.search())==1
-    assert set(v.status for v in result)=={'confirmed','unassigned_conflict'}
+    assert db.tracks()[0].hits==2  # frame contains only one real sighting
+    assert set(v.status for v in result)=={'confirmed','duplicate_detection'}
     db.close()
 
 
@@ -100,4 +101,22 @@ def test_ambiguous_hypothesis_is_not_duplicate(tmp_path):
     decision=m.process_frame([obs(2,x=1.0,app=[1,0])])[0]
     assert decision.status=='ambiguous' and decision.object_id is None
     assert len(db.search(only_confirmed=False))==2
+    db.close()
+
+
+def test_different_map_ids_are_isolated(tmp_path):
+    db=MemoryStore(tmp_path/'map.sqlite');m=SemanticMapper(db)
+    a=m.process_frame([obs(1,map_id='building_a')])[0]
+    b=m.process_frame([obs(2,map_id='building_b')])[0]
+    assert a.object_id != b.object_id
+    db.close()
+
+
+def test_first_frame_duplicate_masks_share_one_tentative_identity(tmp_path):
+    db=MemoryStore(tmp_path/'same.sqlite');m=SemanticMapper(db)
+    a,b=m.process_frame([obs(1,det='mask_a',x=1,app=[1,0,0]),
+                         obs(1,det='mask_b',x=1.01,app=[.999,.001,0])])
+    assert a.object_id==b.object_id
+    assert {a.status,b.status}=={'tentative','duplicate_detection'}
+    assert len(db.tracks())==1
     db.close()

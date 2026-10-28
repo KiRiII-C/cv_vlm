@@ -41,7 +41,7 @@ def run(manifest, db_path, report_path=None):
                                appearance=d.get('embedding'),
                                description=d.get('description',''),
                                confidence=float(d.get('confidence',1)),
-                               map_version=int(f.get('map_version',0)))
+                               map_version=int(f.get('map_version',0)),map_id=str(f.get('map_id','default')))
             summary['detections']+=1
             if o is not None:detections.append(o)
             else:summary['invalid_depth']+=1

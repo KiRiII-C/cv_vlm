@@ -40,6 +40,7 @@ class Observation:
     T_map_cam: Optional[np.ndarray] = None
     map_version: int = 0
     confidence: float = 1.0
+    map_id: str = "default"
 
     def __post_init__(self):
         self.center, self.low, self.high = map(vec3, (self.center, self.low, self.high))
@@ -57,7 +58,7 @@ class Observation:
 
     @property
     def key(self):
-        return (self.source, self.frame_id, self.detection_id)
+        return (self.map_id, self.source, self.frame_id, self.detection_id)
 
 
 @dataclass
@@ -75,3 +76,4 @@ class Track:
     description: str = ""
     map_version: int = 0
     attributes: dict = field(default_factory=dict)
+    map_id: str = "default"

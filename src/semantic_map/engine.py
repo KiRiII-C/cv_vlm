@@ -46,7 +46,7 @@ class SemanticMapper:
         if not observations:return []
         keys={o.key for o in observations}
         if len(keys)!=len(observations):raise ValueError('Duplicate detection keys within frame')
-        frames={(o.source,o.frame_id,o.map_version) for o in observations}
+        frames={(o.source,o.frame_id,o.map_id,o.map_version) for o in observations}
         if len(frames)!=1:raise ValueError('One source, frame and map version per call')
         results=[None]*len(observations)
         candidates=[]
@@ -56,6 +56,27 @@ class SemanticMapper:
                 results[i]=Decision(o.detection_id,previous['object_id'],'already_processed',1.0)
             else:candidates.append((i,o))
         if not candidates:return results
+        # Within-frame duplicate masks can represent ONE physical object. Keep only
+        # very high-overlap, same-class detections with compatible appearance.
+        # This does not merge similar but spatially different co-visible objects.
+        candidate_by_conf=sorted(candidates,key=lambda a:-a[1].confidence)
+        kept=[];suppressed=[]
+        for index,o in candidate_by_conf:
+            duplicate_of=None
+            for kept_index,k in kept:
+                iou=overlap_3d(o.low,o.high,k.low,k.high)
+                if o.label.strip().lower()!=k.label.strip().lower() or iou<.85:
+                    continue
+                if np.linalg.norm(o.center-k.center)>.08:
+                    continue
+                if o.appearance is not None and k.appearance is not None:
+                    if o.appearance.shape!=k.appearance.shape or float(o.appearance@k.appearance)<.97:
+                        continue
+                duplicate_of=kept_index
+                break
+            if duplicate_of is None:kept.append((index,o))
+            else:suppressed.append((index,o,duplicate_of))
+        candidates=sorted(kept,key=lambda a:a[0])
         tracks=self.store.tracks()
         scores=np.full((len(candidates),len(tracks)),-1.0)
         for i,(_,o) in enumerate(candidates):
@@ -96,10 +117,14 @@ class SemanticMapper:
                     t=Track(object_id='obj_'+uuid4().hex[:16],label=o.label,center=o.center.copy(),
                             low=o.low.copy(),high=o.high.copy(),appearance=o.appearance,
                             hits=1,first_seen=o.timestamp,last_seen=o.timestamp,
-                            description=o.description,map_version=o.map_version)
+                            description=o.description,map_version=o.map_version,map_id=o.map_id)
                     self.store.upsert_track(t)
                     self.store.write_observation(o,t.object_id,'created_tentative')
                     results[original_idx]=Decision(o.detection_id,t.object_id,'tentative',0.)
+        for index,o,original_idx in suppressed:
+            primary=results[original_idx]
+            self.store.write_observation(o,primary.object_id,'duplicate_detection')
+            results[index]=Decision(o.detection_id,primary.object_id,'duplicate_detection',1.0)
         self.store.db.commit()
         return results
 
@@ -108,7 +133,7 @@ class SemanticMapper:
         tracks=self.store.tracks();out=[]
         for i,a in enumerate(tracks):
             for b in tracks[i+1:]:
-                if a.label!=b.label or a.map_version!=b.map_version:continue
+                if a.label!=b.label or a.map_version!=b.map_version or a.map_id!=b.map_id:continue
                 if self.store.sightings_cooccur(a.object_id,b.object_id):continue
                 iou=overlap_3d(a.low,a.high,b.low,b.high)
                 if iou<min_iou:continue
