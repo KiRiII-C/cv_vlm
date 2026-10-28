@@ -1,0 +1,56 @@
+name: Replay YOLOE26x detector confidence on fixed physical-ID GT detections
+on:
+  workflow_run:
+    workflows: ["YOLOE-26X four-hypothesis factorial GT analysis"]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  threshold-sweep:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[test]'
+      - name: Fetch immutable YOLOE26x predictions for both scenes from completed factor experiment
+        uses: actions/download-artifact@v4
+        with:
+          pattern: yoloe26x-four-hypotheses-*
+          run-id: ${{ github.event.workflow_run.id || 40769982699 }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          merge-multiple: true
+          path: input
+      - name: Sweep post-detection confidence without invoking YOLO again
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for scene in ai_002_001 ai_005_001; do
+            test -s "input/results/yoloe26x_${scene}/raw.json.gz"
+            python -m semantic_map.yoloe26x_confidence_sweep \
+               --cache "input/results/yoloe26x_${scene}/raw.json.gz" \
+               --out "results/${scene}/threshold_sweep.json"
+          done
+      - name: Validate provenance and completeness
+        run: |
+          python - <<'PY'
+          import json
+          for scene in ('ai_002_001','ai_005_001'):
+              r=json.load(open('results/'+scene+'/threshold_sweep.json'))
+              assert r['detector']=='yoloe-26x-seg.pt'
+              assert len(r['results'])==5
+              assert all(0<=a['target_idf1']<=1 for a in r['results'])
+              print('REAL_PREDICTION_CONFIDENCE_SWEEP_FINISHED',scene,r['results'])
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoloe26x-physical-GT-confidence-thresholds
+          path: results/
+          retention-days: 30
+          if-no-files-found: warn
