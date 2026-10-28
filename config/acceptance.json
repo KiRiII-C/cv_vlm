@@ -26,8 +26,10 @@
       "evidence": "No calibrated floor and Nav2 collision test"
     },
     "object_reidentification_gt": {
-      "status": "NOT_TESTED",
-      "evidence": "Real RGB-D Scenes v2 provides per-point semantic class GT, not physical instance IDs; colorized persistent UUID candidates are not independently validated. Cannot report GT IDF1/3D instance AP."
+      "status": "FAIL",
+      "evidence": "Hypersim genuine physical instance GT, 19 sampled RGB-D frames, 54 unique visible physical objects, 272 GT object appearances. YOLO11n-seg+3D fusion IDF1=0.22713 (IDFN 236, false splits 4), YOLO11s-seg conf0.15 IDF1=0.19315 (IDFN 241, false splits 8). Oracle masks+GT world XYZ association IDF1=0.93050 (3 splits). This does NOT meet robust physical identity acceptance.",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40756179656",
+      "limits": "Photorealistic synthetic scene, GT world XYZ in all variants; no real robot SLAM, not independent multi-scene physical ID test."
     },
     "loop_closure_object_reprojection": {
       "status": "NOT_TESTED",
@@ -121,6 +123,20 @@
       "confirmed_track_candidates": 54,
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40752675350",
       "limits": "UUID color distinct; no GT proof of unique physical ID"
+    },
+    "hypersim_physical_id_oracle_vs_yolo": {
+      "status": "PASS",
+      "scope": "True physical instance GT: 19 frames of Hypersim ai_001_001; GT world 3D positions, association module vs GT-masks oracle and two real pretrained YOLO segmentation modes",
+      "unique_gt_ids": 54,
+      "gt_object_appearances": 272,
+      "oracle_mask_idf1": 0.9305019305,
+      "oracle_gt_false_splits": 3,
+      "oracle_pred_false_merges": 0,
+      "yolo11n_idf1": 0.2271293375,
+      "yolo11s_conf015_idf1": 0.1931464174,
+      "model_selection_status": "NOT_IMPROVED",
+      "re_id_acceptance": "FAIL",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40756179656"
     }
   }
 }
