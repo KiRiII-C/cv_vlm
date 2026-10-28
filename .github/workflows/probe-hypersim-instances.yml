@@ -2,7 +2,7 @@ name: Probe Hypersim real physical instance groundtruth subset
 on:
   push:
     branches: [feature/semantic-memory-mapping]
-    paths: ['.github/workflows/probe-hypersim-instances.yml']
+    paths: ['.github/workflows/probe-hypersim-instances.yml', 'src/semantic_map/hypersim_range.py']
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
