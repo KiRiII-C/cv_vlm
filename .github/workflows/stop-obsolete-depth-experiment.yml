@@ -19,7 +19,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for run_id in 40709284371 40709383734 40709410232; do
+          for run_id in 40710865367 40711059811 40711213730; do
           endpoint="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel"
           status=$(curl -sS -X POST -o /tmp/cancel-response.json -w '%{http_code}' \
             -H 'Accept: application/vnd.github+json' \
