@@ -28,6 +28,15 @@ class SemanticMapper:
     @staticmethod
     def update(t,o,min_hits,relocated=False):
         n=t.hits
+        if o.appearance is not None:
+            gallery=t.attributes.setdefault("visual_gallery",[])
+            gallery_vectors=[np.asarray(v,dtype=float) for v in gallery
+                             if len(v)==len(o.appearance)]
+            # Keep diverse views; redundant observations update the EMA but
+            # do not exhaust the bounded cross-view descriptor gallery.
+            if not gallery_vectors or max(float(v@o.appearance) for v in gallery_vectors)<.94:
+                gallery.append(o.appearance.astype(float).tolist())
+                if len(gallery)>8:gallery.pop(0)
         # Avoid moving persistent geometry too aggressively with viewpoint changes.
         if relocated:
             # Track the current pose of a candidate movable instance, not a huge
@@ -134,7 +143,9 @@ class SemanticMapper:
                     t=Track(object_id=stable_id,label=o.label,center=o.center.copy(),
                             low=o.low.copy(),high=o.high.copy(),appearance=o.appearance,
                             hits=1,first_seen=o.timestamp,last_seen=o.timestamp,
-                            description=o.description,map_version=o.map_version,map_id=o.map_id)
+                            description=o.description,map_version=o.map_version,map_id=o.map_id,
+                            attributes={"visual_gallery":[o.appearance.astype(float).tolist()]
+                                        if o.appearance is not None else []})
                     self.store.upsert_track(t)
                     self.store.write_observation(o,t.object_id,'created_tentative')
                     results[original_idx]=Decision(o.detection_id,t.object_id,'tentative',0.)
