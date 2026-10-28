@@ -1,10 +1,17 @@
 import sys, tempfile, unittest, pathlib
 import numpy as np
-from semantic_map.rgbd_scenes_gt import sample_indices,metrics,local_features,save_colored_ply,train_and_evaluate,load_ply_xyzrgb
+from semantic_map.rgbd_scenes_gt import sample_indices,metrics,local_features,save_colored_ply,train_and_evaluate,load_ply_xyzrgb,class_union_localization
 from semantic_map.instance_cloud import InstanceCloud,palette_rgb
 class TestGt(unittest.TestCase):
     def test_no_leak(self):
         with self.assertRaises(ValueError):train_and_evaluate('/nope','/tmp/nope',train_scenes=(1,2),test_scenes=(2,3))
+    def test_3d_class_union_localization_without_claiming_instance_gt(self):
+        xyz=np.array([[0.,0.,0.],[1,1,1],[.1,.1,.1],[1.1,1.1,1.1]]*40,dtype='float32')
+        truth=np.array([1,1,1,1]*40)
+        pred=truth.copy()
+        result=class_union_localization(xyz,truth,pred,min_support=10)
+        self.assertAlmostEqual(result['1']['centroid_distance_m'],0.,places=6)
+        self.assertAlmostEqual(result['1']['class_union_aabb_3d_iou'],1.,places=6)
     def test_exact_iou(self):
         r=metrics(np.array([1,1,2,2,10]),np.array([1,2,2,2,10]))
         self.assertAlmostEqual(r['per_class']['1']['IoU'],.5)
