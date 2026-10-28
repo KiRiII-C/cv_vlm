@@ -39,8 +39,8 @@ jobs:
           set -Eeuo pipefail
           python -u -m semantic_map.tum_yolo_pipeline \
             --data "$RUNNER_TEMP/tum" --output results/yoloe26_12classes_rgbd \
-            --model yoloe-26s-seg.pt --classes-json config/yoloe26_classes.json \
-            --conf .23 --max-frames 40 --device cpu --appearance hsv_spatial \
+            --model yoloe-26x-seg.pt --classes-json config/yoloe26_classes.json \
+            --conf .10 --max-frames 40 --device cpu --appearance hsv_spatial \
             --memory-engine v2 --persist-object-surfaces | tee yoloe26.log
       - name: Acceptance is pipeline smoke, NOT GT physical instance ID accuracy
         shell: bash
@@ -50,7 +50,7 @@ jobs:
           from pathlib import Path
           r=json.loads(Path('results/yoloe26_12classes_rgbd/real_mapping_report.json').read_text())
           assert r['frames']==40,r
-          assert r['model']=='yoloe-26s-seg.pt',r
+          assert r['model']=='yoloe-26x-seg.pt',r
           assert r['temporal_enabled'] is True,r
           assert r['memory_engine']=='v2',r
           assert r['persistent_instance_surface_map']['vertices']>0,r
