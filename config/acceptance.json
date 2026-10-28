@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "project": "persistent-multimodal-semantic-mapping",
+  "updated_on": "2026-10-28",
+  "gate_policy": "No final acceptance or best-architecture claim while any required stage is not PASS",
+  "required_stages": {
+    "rgbd_ingestion": {
+      "status": "PASS",
+      "scope": "596 TUM frames only",
+      "evidence": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40700640646"
+    },
+    "slam_pose_graph": {
+      "status": "NOT_TESTED",
+      "evidence": "No estimated poses or ATE/RPE"
+    },
+    "tsdf_reconstruction": {
+      "status": "FAIL",
+      "evidence": "139 mesh vertices/207 triangles from 596 frames; GT poses",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40705730515"
+    },
+    "occupancy_navigation_ready": {
+      "status": "NOT_TESTED",
+      "evidence": "No calibrated floor and Nav2 collision test"
+    },
+    "object_reidentification_gt": {
+      "status": "FAIL",
+      "evidence": "Fragmented tracks; no physical GT instance IDs"
+    },
+    "loop_closure_object_reprojection": {
+      "status": "NOT_TESTED",
+      "evidence": "No completed correction/reassociation"
+    },
+    "semantic_vlm": {
+      "status": "NOT_TESTED",
+      "evidence": "No real VLM evaluation"
+    },
+    "nav2_integration": {
+      "status": "NOT_TESTED",
+      "evidence": "Only simulated A*"
+    }
+  }
+}
