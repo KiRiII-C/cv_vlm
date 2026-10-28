@@ -1,0 +1,75 @@
+name: Held-out RGB-D geometry generalization
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - '.github/workflows/geometry-holdout.yml'
+      - 'src/semantic_map/geometry_holdout.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  map-with-held-out-frames:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Setup CPU geometry dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install -e '.[test]' 'open3d==0.19.0'
+      - name: Estimate camera trajectory without using benchmark groundtruth
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.visual_odometry --data "$RUNNER_TEMP/tum" --output results/vo_mapping | tee vo.log
+          python -u -m semantic_map.pose_graph --poses results/vo_mapping/estimated_poses.json \
+            --vo results/vo_mapping/vo_evaluation.json \
+            --out results/vo_mapping --data "$RUNNER_TEMP/tum" | tee posegraph.log
+      - name: Map only EVEN frames
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.offline_mapping --dataset "$RUNNER_TEMP/tum" \
+            --pose-json results/vo_mapping/optimized_poses.json \
+            --output results/geometry_holdout_map --integration-stride 2 \
+            --voxel .06 --tsdf-side 320 | tee holdout_mapping.log
+      - name: Evaluate actual ODD withheld depth frames
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.geometry_holdout --dataset "$RUNNER_TEMP/tum" \
+            --pose-json results/vo_mapping/optimized_poses.json \
+            --map results/geometry_holdout_map \
+            --output results/geometry_holdout_eval | tee holdout_eval.log
+      - name: Validate split and finite metrics without declaring a universal quality threshold
+        run: |
+          python - <<'PY'
+          import json,math
+          map=json.load(open('results/geometry_holdout_map/mapping_report.json'))
+          j=json.load(open('results/geometry_holdout_eval/geometry_holdout.json'))
+          assert map['integration_stride']==2
+          assert map['frames_requested']==596 and map['frames_integrated']==298,map
+          assert j['evaluated_frames']==298,j
+          assert j['valid_evaluation_points']>10000,j
+          assert all(math.isfinite(j[k]) for k in ('median_distance_m','mean_distance_m','rmse_distance_m','coverage_5cm','coverage_10cm'))
+          assert 0<=j['coverage_10cm']<=1
+          print('HELDOUT_EVALUATION_COMPLETED_NO_FALSE_GROUNDTRUTH_CLAIM')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: withheld-rgbd-geometry-evaluation
+          path: |
+            results/geometry_holdout_map/
+            results/geometry_holdout_eval/
+            results/vo_mapping/posegraph_evaluation.json
+            vo.log
+            posegraph.log
+            holdout_mapping.log
+            holdout_eval.log
+          retention-days: 30
+          if-no-files-found: warn
