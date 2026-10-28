@@ -1,5 +1,8 @@
 name: Replay YOLOE26x detector confidence on fixed physical-ID GT detections
 on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths: [.github/workflows/yoloe26x-confidence-sweep.yml]
   workflow_run:
     workflows: ["YOLOE-26X four-hypothesis factorial GT analysis"]
     types: [completed]
@@ -9,7 +12,7 @@ permissions:
   actions: read
 jobs:
   threshold-sweep:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
