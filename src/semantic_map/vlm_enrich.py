@@ -10,6 +10,17 @@ import numpy as np,torch
 from PIL import Image
 from .storage import MemoryStore
 
+CLASS_SYNONYMS={
+  "chair":("chair","seat","stool"),"tv":("tv","monitor","screen","television","display"),
+  "book":("book",),"keyboard":("keyboard",),"laptop":("laptop","notebook"),
+  "mouse":("mouse",),"cup":("cup","mug"),"dining table":("table","desk"),
+  "bottle":("bottle",),"remote":("remote",),"bed":("bed",),"cell phone":("phone","mobile")
+}
+
+def class_compatible(label,description):
+    terms=CLASS_SYNONYMS.get(label.lower(),(label.lower(),))
+    return any(word in description.lower() for word in terms)
+
 def enrich(root,out,max_objects=8,model_name="HuggingFaceTB/SmolVLM-256M-Instruct"):
     from transformers import AutoProcessor, AutoModelForImageTextToText
     root=Path(root);out=Path(out);out.mkdir(parents=True,exist_ok=True)
@@ -51,20 +62,23 @@ def enrich(root,out,max_objects=8,model_name="HuggingFaceTB/SmolVLM-256M-Instruc
             ids=model.generate(**inputs,max_new_tokens=48,do_sample=False)
         cut=int(inputs["input_ids"].shape[-1])
         response=processor.batch_decode(ids[:,cut:],skip_special_tokens=True)[0].strip()
+        compatible=class_compatible(track.label,response)
         record={"object_id":track.object_id,"detector_label":track.label,
                 "observation_count":track.hits,"image":str(img_path.relative_to(root)),
                 "vlm_text":response,"time_sec":round(time.time()-started,3),
-                "validation_status":"UNVERIFIED_VLM_DESCRIPTION",
+                "validation_status":"UNVERIFIED_CONSISTENT_VLM_DESCRIPTION" if compatible else "REJECTED_SEMANTIC_DISAGREEMENT",
                 "identity_was_not_modified":True}
         descriptions.append(record)
         print("VLM_OBJECT",json.dumps(record,ensure_ascii=False),flush=True)
+    accepted=[x for x in descriptions if x["validation_status"]=="UNVERIFIED_CONSISTENT_VLM_DESCRIPTION"]
     result={"model":model_name,"objects_considered":len(tracks),
-            "objects_described":len(descriptions),
+            "objects_described":len(descriptions),"consistent_descriptions":len(accepted),
+            "quarantined_descriptions":len(descriptions)-len(accepted),
             "semantic_accuracy_against_GT":"NOT_EVALUATED",
             "identity_changes":0,"descriptions":descriptions}
     # Persist VLM text as non-authoritative attributes; never rewrite geometry or ID.
     store=MemoryStore(root/"semantic_memory.sqlite")
-    for entry in descriptions:
+    for entry in accepted:
         store.annotate(entry["object_id"],attributes={
             "vlm_description_unverified":entry["vlm_text"],
             "vlm_model":model_name,
