@@ -1,0 +1,18 @@
+{
+  "model": "yoloe-26s-seg.pt",
+  "classes": [
+    "chair",
+    "table",
+    "sofa",
+    "cabinet",
+    "bookshelf",
+    "bed",
+    "laptop",
+    "computer monitor",
+    "keyboard",
+    "mouse",
+    "cup",
+    "potted plant"
+  ],
+  "comment": "Configured once on startup; text prompt model, no prompt-free fallback. Model names canonically mapped (computer monitor -> tv)."
+}
