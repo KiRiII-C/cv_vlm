@@ -27,9 +27,9 @@
     },
     "object_reidentification_gt": {
       "status": "FAIL",
-      "evidence": "Hypersim genuine physical instance GT, 19 sampled RGB-D frames, 54 unique visible physical objects, 272 GT object appearances. YOLO11n-seg+3D fusion IDF1=0.22713 (IDFN 236, false splits 4), YOLO11s-seg conf0.15 IDF1=0.19315 (IDFN 241, false splits 8). Oracle masks+GT world XYZ association IDF1=0.93050 (3 splits). This does NOT meet robust physical identity acceptance.",
-      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40756179656",
-      "limits": "Photorealistic synthetic scene, GT world XYZ in all variants; no real robot SLAM, not independent multi-scene physical ID test."
+      "evidence": "YOLOE-26s-seg 12 classes + 2-stage RGBD tracker evaluated on Hypersim physical GT. On diverse ai_002_001 baseline IDF1_target 0.30928 vs temporal multiview 0.27692 vs MobileNetV3 temporal 0.26733 (all hard-gated, no merges). Crowded ai_005_001 chairs baseline 0.02592, hardened multiview 0.02863 (one false merge), MobileNetV3 multiview 0.03015 (zero false merges), oracle masks 0.96984. Robust re-identification goal NOT met; no improvement claimed across scenes.",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40761795172",
+      "limits": "Hypersim synthetic photorealistic GT positions and 19 frames; model uses RGB images but GT 3D point locations; excludes SLAM, real robot, out-of-distribution scenes."
     },
     "loop_closure_object_reprojection": {
       "status": "NOT_TESTED",
@@ -137,6 +137,39 @@
       "model_selection_status": "NOT_IMPROVED",
       "re_id_acceptance": "FAIL",
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40756179656"
+    },
+    "yoloe26_rgbd_12class_smoke": {
+      "status": "PASS",
+      "model": "yoloe-26s-seg.pt",
+      "prompts": 12,
+      "frames": 40,
+      "detections": 330,
+      "confirmed_track_hypotheses": 20,
+      "colored_uuid_points": 15538,
+      "voxel_m": 0.015,
+      "scope": "TUM GT camera poses, not GT instance identities; model loads and processes 3D masks",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40759845090"
+    },
+    "yoloe26_physical_gt_multiscene_ablation": {
+      "status": "PASS",
+      "scope": "Comparative measurement completed; re-ID quality remains FAIL",
+      "dataset": "Hypersim synthetic ai_002_001 and ai_005_001, GT world 3D positions",
+      "diverse": {
+        "baseline_target_idf1": 0.30927835,
+        "temporal_multiview_target_idf1": 0.27692308,
+        "temporal_mobilenetv3_target_idf1": 0.26732673,
+        "oracle_target_idf1": 0.90987124
+      },
+      "crowded_chairs": {
+        "baseline_target_idf1": 0.02591793,
+        "temporal_multiview_target_idf1": 0.02863278,
+        "temporal_mobilenetv3_target_idf1": 0.03015075,
+        "oracle_target_idf1": 0.96983582,
+        "temporal_multiview_false_merges": 1,
+        "cnn_false_merges": 0
+      },
+      "reid_requirement": "FAIL",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40761795172"
     }
   }
 }
