@@ -202,6 +202,11 @@ def reconstruct(pairs,folder,voxel_m=.06,occupancy_m=.12,frame_limit=0,
     surface=sdf.extract_point_cloud()
     o3d.io.write_point_cloud(str(folder/"tsdf_cloud.ply"),surface)
     occ3d=grid.export_3d_ply(folder/"occupancy_3d.ply")
+    # Retain complete signed occupancy evidence for physically aligned 2D planning.
+    keys=np.asarray(list(grid.logodds.keys()),dtype=np.int32).reshape(-1,3)
+    vals=np.asarray(list(grid.logodds.values()),dtype=np.float32)
+    np.savez_compressed(folder/"occupancy_3d_evidence.npz",keys=keys,
+                        logodds=vals,voxel_m=np.array(grid.voxel_m))
     occ2d=grid.export_2d(folder,floor_z=floor_z)
     report={
       "geometric_mapping_status":"CANDIDATE_UNVALIDATED" if len(mesh.vertices)>=5000 and len(mesh.triangles)>=7500 and len(surface.points)>=3000 and occ3d>=1000 else "FAIL_LOW_COVERAGE",
