@@ -59,6 +59,22 @@ def isolated(variant):
  volume.integrate(image,intrinsic,extrinsic)
  mesh=volume.extract_triangle_mesh()
  print("ONE_FRAME_TSDF",variant,len(mesh.vertices),len(mesh.triangles),flush=True)
+def synthetic_tsdf(depth_value):
+ size=320;h=240
+ rgb=np.full((h,size,3),127,dtype=np.uint8)
+ depth=np.full((h,size),int(depth_value*5000),dtype=np.uint16)
+ image=o3d.geometry.RGBDImage.create_from_color_and_depth(
+  o3d.geometry.Image(rgb),o3d.geometry.Image(depth),depth_scale=5000.,depth_trunc=4.,
+  convert_rgb_to_intensity=False)
+ intr=o3d.camera.PinholeCameraIntrinsic(size,h,K.fx*.5,K.fy*.5,K.cx*.5,K.cy*.5)
+ volume=o3d.pipelines.integration.ScalableTSDFVolume(
+  voxel_length=.04,sdf_trunc=.16,
+  color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
+ volume.integrate(image,intr,np.eye(4))
+ mesh=volume.extract_triangle_mesh()
+ print("SYNTHETIC_PLANE_TSDF",depth_value,len(mesh.vertices),len(mesh.triangles),flush=True)
+for depth_value in [1.,2.]:
+ synthetic_tsdf(depth_value)
 for variant in ["identity","inverse","forward","translation_only"]:
  isolated(variant)
 for n in [1,10,100,596]:
