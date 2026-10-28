@@ -31,7 +31,7 @@ def enrich(root,out,max_objects=8,model_name="HuggingFaceTB/SmolVLM-256M-Instruc
     # Small CPU-friendly crop with one visual patch, no interactive cloud API.
     try:
         processor.image_processor.size={"longest_edge":512}
-        processor.image_processor.max_image_size=512
+        processor.image_processor.max_image_size={"longest_edge":512}
     except Exception:
         pass
     descriptions=[]
@@ -62,6 +62,14 @@ def enrich(root,out,max_objects=8,model_name="HuggingFaceTB/SmolVLM-256M-Instruc
             "objects_described":len(descriptions),
             "semantic_accuracy_against_GT":"NOT_EVALUATED",
             "identity_changes":0,"descriptions":descriptions}
+    # Persist VLM text as non-authoritative attributes; never rewrite geometry or ID.
+    store=MemoryStore(root/"semantic_memory.sqlite")
+    for entry in descriptions:
+        store.annotate(entry["object_id"],attributes={
+            "vlm_description_unverified":entry["vlm_text"],
+            "vlm_model":model_name,
+            "vlm_validation":"UNVERIFIED"})
+    store.close()
     (out/"vlm_semantics.json").write_text(json.dumps(result,ensure_ascii=False,indent=2))
     print("VLM_DONE",len(descriptions),flush=True)
     return result
