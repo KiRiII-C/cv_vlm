@@ -8,6 +8,7 @@ on:
       - src/semantic_map/vlm_enrich.py
       - src/semantic_map/floor_alignment.py
       - src/semantic_map/offline_reconcile.py
+      - src/semantic_map/engine.py
       - .github/workflows/real-end-to-end.yml
   workflow_dispatch:
 permissions:
