@@ -45,13 +45,14 @@ jobs:
           from pathlib import Path
           p=Path('results/full_geometry/mapping_report.json')
           j=json.loads(p.read_text())
-          assert j['geometric_mapping_status']=='PASS',j
+          assert j['geometric_mapping_status']=='CANDIDATE_UNVALIDATED',j
           assert j['frames_integrated']>=500,j
-          assert j['mesh_triangles']>0 and j['occupied_3d_voxels']>0,j
+          assert j['mesh_vertices']>=5000 and j['mesh_triangles']>=7500 and j['surface_points']>=3000,j
+          assert j['occupied_3d_voxels']>=1000,j
           assert j['pose_estimation_status']=='NOT_TESTED'
           assert j['loop_closure_status']=='NOT_TESTED'
           assert j['object_identity_status']=='NOT_ACCEPTED'
-          print('GEOMETRY_ONLY_ACCEPTED',j['frames_integrated'],j['mesh_triangles'])
+          print('RECONSTRUCTION_INTEGRITY_GATE_PASSED_BUT_GEOMETRIC_ACCURACY_UNVALIDATED',j['frames_integrated'],j['mesh_triangles'])
           PY
       - name: Artifacts and failure diagnostics
         if: always()
