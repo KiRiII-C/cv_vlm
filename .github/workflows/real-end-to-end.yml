@@ -70,7 +70,7 @@ jobs:
           python -m pip install 'transformers>=4.55,<6' pillow
           OMP_NUM_THREADS=3 python -u -m semantic_map.vlm_enrich \
             --root results/tum_real --out results/vlm_semantics \
-            --max-objects 6 | tee vlm.log
+            --max-objects 40 | tee vlm.log
       - name: Natural-language operator commands grounded in VLM-enriched object memory
         run: |
           set -o pipefail
