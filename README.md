@@ -218,3 +218,44 @@ correct physical object identification.
   Current tracker has NOT met strict physical ID accuracy requirements.
 - Technical methods and evaluated upstream projects:
   [docs/yoloe26_reid_tracking.md](docs/yoloe26_reid_tracking.md).
+
+
+## Долговременная память физических объектов ObjectMemoryV2 (28.10.2026)
+
+**По умолчанию в сквозном YOLOE-26 пайплайне:** объектная память
+ObjectMemoryV2 с 12 контролируемыми текстовыми классами, упор на физический
+UUID, а не на класс детектора или краткосрочный tracklet.
+
+Новая память включает:
+- Долговременные UUID в SQLite, неизменяемые исходные измерения и provenance;
+- multi-view appearance prototypes с quality gate, class+world geometry;
+- 1:1 Hungarian, право НЕ идентифицировать неоднозначную маску,
+  явный журнал review и запрет неконтролируемых merge;
+- физически осмысленные class-specific пределы смещения статических
+  объектов (без расширения радиуса из-за раздутого AABB);
+- 1,5 см цветные UUID-воксели с support/negative evidence и хранением
+  физически измеренных RGB-D поверхностей;
+- атомарную коррекцию координат объектов после pose-graph revision.
+  После loop closure voxel layer **обязательно перестроить** из RGB-D:
+  stale layer запрещено экспортировать; ID сохраняется, но требуется
+  повторная ассоциация для подтверждения физической правильности;
+- безопасный экспериментальный relocation gate: три наблюдения предмета
+  на новом месте + две независимые, разнесённые по позиции RGB-D
+  проверки освобождения старого. Проверен тестами, не на реальном роботе.
+
+**Важные подтверждённые IDF1:** две development сцены Hypersim при
+одинаковых детекциях YOLOE-26 и измерениях GT физического ID:
+разные объекты 30,93% → 32,69%; похожие стулья 2,59% → 4,77%,
+без false merge. Но **на заранее отложенной ai_017_001** IDF1
+не улучшился: 35,18% → 34,75%; исходный FAILED статус
+полного physical-ID ReID остаётся неизменным.
+
+Измерения:
+[fixed-input regression](https://github.com/KiRiII-C/cv_vlm/actions/runs/40766015906),
+[independent unseen scene](https://github.com/KiRiII-C/cv_vlm/actions/runs/40766680560).
+[Полный научный отчёт, ограничения, источники и методы](docs/object_memory_v2_research.md).
+
+Внутри Docker/Ubuntu запустить:
+~~~bash
+YOLO_DEVICE=0 bash scripts/run_offline_e2e.sh
+~~~
