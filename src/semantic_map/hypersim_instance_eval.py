@@ -83,7 +83,13 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
     temporal=TemporalTracker(high_thresh=confidence,
         low_thresh=min(.10,confidence*.55)) if temporal_tracking else None
     memory_hint={}
-    evidence=[];gt_frame_ids=defaultdict(list);first_rgb=None;first_world=None;first_gt=None
+    # These 8 NYU40 classes have explicit semantics within our 12 YOLOE
+    # prompts; monitor/cup/keyboard/laptop etc may collapse into otherprop.
+    # Report both FULL-SCENE IDF1 and target-vocabulary-only IDF1; never
+    # penalize intentionally unrequested GT instances as missed detections.
+    target_nyu40={3,4,5,6,7,10,14,25}
+    evidence=[];target_evidence=[];target_unique=set();target_gt_total=0
+    gt_frame_ids=defaultdict(list);first_rgb=None;first_world=None;first_gt=None
     try:
         root='ai_001_001/images/'
         scene_meta=z.read('ai_001_001/_detail/metadata_scene.csv').decode('utf-8')
@@ -108,6 +114,14 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
             visible=sorted(visible,key=lambda x:-int((gt==x).sum()))[:max_objects]
             gt_frame_ids[k]=visible
             total_gt+=len(visible)
+            target_visible=set()
+            for uid in visible:
+                cls=sem[gt==uid]
+                cls=cls[cls>=0]
+                if len(cls) and int(Counter(cls.tolist()).most_common(1)[0][0]) in target_nyu40:
+                    target_visible.add(uid)
+            target_gt_total+=len(target_visible)
+            target_unique.update(target_visible)
             observations=[];physical_ids=[];short_inputs=[]
             if mode=='oracle_masks':
                 for uid in visible:
@@ -161,11 +175,19 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
                         memory_hint[a.short_id]=d.object_id
             if len(decisions)!=len(physical_ids):raise AssertionError('Observation association mismatch')
             evidence.extend([(uid,d.object_id) for uid,d in zip(physical_ids,decisions)])
+            target_evidence.extend([(uid if uid in target_visible else None,d.object_id)
+                                    for uid,d in zip(physical_ids,decisions)])
             framecount+=1
             if framecount%5==0:
                 print('HYPERSIM_ID_PROGRESS',mode,framecount,'/',len(frames),'tracks',len(store.tracks()),flush=True)
         if framecount<10:raise RuntimeError('Too few valid GT instance frames')
         stats=evaluate_identity(evidence,total_gt)
+        if not target_gt_total:
+            raise RuntimeError("No NYU40 target-vocabulary GT instances in selected frames")
+        stats["target_vocabulary_gt"]=evaluate_identity(target_evidence,target_gt_total)
+        stats["target_gt_nyu40_ids"]=sorted(target_nyu40)
+        stats["target_gt_unique_physical_ids"]=len(target_unique)
+        stats["target_scope_note"]="Target subset = physical IDs whose modal NYU40 class matches our 12 configured prompts; other detections are counted as target false positives, other GT misses are excluded."
         gt_appearances=defaultdict(list)
         for k,ids in gt_frame_ids.items():
             for uid in ids:gt_appearances[uid].append(k)
