@@ -1,0 +1,122 @@
+name: Nav2 Jazzy headless planner from real RGB-D map
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - '.github/workflows/nav2-planner-smoke.yml'
+      - 'scripts/nav2_planner_smoke.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  nav2-planner-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    container:
+      image: osrf/ros:jazzy-ros-base
+    env:
+      ROS_DOMAIN_ID: '74'
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download ACTUAL reconstructed TUM map and grounded operator commands
+        uses: actions/download-artifact@v4
+        with:
+          name: complete-rgbd-offline-e2e-candidate
+          run-id: 40713659539
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: actual_map
+      - name: Install real ROS Jazzy Nav2 planner and map server
+        shell: bash
+        run: |
+          apt-get update -qq
+          apt-get install -y ros-jazzy-navigation2 ros-jazzy-nav2-bringup python3-numpy
+          . /opt/ros/jazzy/setup.bash
+          ros2 pkg executables nav2_planner
+          ros2 pkg executables nav2_map_server
+      - name: Launch ROS Nav2 map_server, planner_server and lifecycle manager
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          . /opt/ros/jazzy/setup.bash
+          MAP="$GITHUB_WORKSPACE/actual_map/results/gravity_map/occupancy.yaml"
+          test -s "$MAP"
+          cat > /tmp/semantic_nav2.yaml <<EOF
+          map_server:
+            ros__parameters:
+              use_sim_time: false
+              yaml_filename: "$MAP"
+              topic_name: map
+              frame_id: map
+          planner_server:
+            ros__parameters:
+              use_sim_time: false
+              expected_planner_frequency: 1.0
+              planner_plugins: ["GridBased"]
+              GridBased:
+                plugin: "nav2_navfn_planner::NavfnPlanner"
+                tolerance: 0.25
+                use_astar: true
+                allow_unknown: false
+          global_costmap:
+            global_costmap:
+              ros__parameters:
+                update_frequency: 2.0
+                publish_frequency: 1.0
+                use_sim_time: false
+                global_frame: map
+                robot_base_frame: base_link
+                rolling_window: false
+                resolution: 0.12
+                track_unknown_space: true
+                robot_radius: 0.15
+                plugins: ["static_layer", "inflation_layer"]
+                static_layer:
+                  plugin: "nav2_costmap_2d::StaticLayer"
+                  map_subscribe_transient_local: true
+                inflation_layer:
+                  plugin: "nav2_costmap_2d::InflationLayer"
+                  inflation_radius: 0.16
+                  cost_scaling_factor: 2.5
+          lifecycle_manager_planner:
+            ros__parameters:
+              use_sim_time: false
+              autostart: true
+              node_names: ["map_server", "planner_server"]
+          EOF
+          ros2 run tf2_ros static_transform_publisher --x -0.06 --y -0.06 --z 0 \
+            --roll 0 --pitch 0 --yaw 0 --frame-id map --child-frame-id base_link > /tmp/tf.log 2>&1 &
+          ros2 run nav2_map_server map_server --ros-args --params-file /tmp/semantic_nav2.yaml > /tmp/map_server.log 2>&1 &
+          ros2 run nav2_planner planner_server --ros-args --params-file /tmp/semantic_nav2.yaml > /tmp/planner.log 2>&1 &
+          ros2 run nav2_lifecycle_manager lifecycle_manager --ros-args -r __node:=lifecycle_manager_planner \
+            --params-file /tmp/semantic_nav2.yaml > /tmp/lifecycle.log 2>&1 &
+          sleep 16
+          echo '[Lifecycle nodes and planner services]'
+          ros2 lifecycle get /map_server || true
+          ros2 lifecycle get /planner_server || true
+          ros2 action list || true
+          cp /tmp/map_server.log map_server.log
+          cp /tmp/planner.log planner_start.log
+          cp /tmp/lifecycle.log lifecycle_start.log
+      - name: ACTUAL ComputePathToPose request from grounded object target
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          . /opt/ros/jazzy/setup.bash
+          python3 scripts/nav2_planner_smoke.py \
+            --operator actual_map/results/operator_e2e/operator_e2e.json \
+            --out results/nav2_planner_smoke.json --timeout 35 | tee nav2_result.log
+      - name: Preserve diagnostics, even if the real planner fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nav2-jazzy-planner-on-real-rgbd-map
+          path: |
+            results/nav2_planner_smoke.json
+            nav2_result.log
+            map_server.log
+            planner_start.log
+            lifecycle_start.log
+          retention-days: 30
+          if-no-files-found: warn
