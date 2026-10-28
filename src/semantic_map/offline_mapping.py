@@ -161,11 +161,14 @@ def pose_override(pairs,path):
     return replaced, str(data.get("source","external-optimized-poses"))
 
 def reconstruct(pairs,folder,voxel_m=.06,occupancy_m=.12,frame_limit=0,
-                pose_file=None,floor_z=None,tsdf_side=320,rays_stride=20):
+                pose_file=None,floor_z=None,tsdf_side=320,rays_stride=20,integration_stride=1):
     import open3d as o3d
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
     pairs,pose_source=pose_override(pairs,pose_file)
     if frame_limit>0:pairs=pairs[:frame_limit]
+    requested=len(pairs)
+    if integration_stride<1:raise ValueError("integration_stride must be positive")
+    pairs=[entry for i,entry in enumerate(pairs) if i%integration_stride==0]
     if not pairs:raise ValueError("No RGB-D observations")
     K=Intrinsics(517.3,516.5,318.6,255.3,640,480,depth_unit_m=1./5000.)
     w=int(tsdf_side); h=int(480*w/640)
@@ -218,7 +221,9 @@ def reconstruct(pairs,folder,voxel_m=.06,occupancy_m=.12,frame_limit=0,
       "map_source":"TUM Freiburg1 Desk",
       "camera_pose_source":pose_source,
       "pose_graph_digest_sha256":digest.hexdigest(),
-      "frames_integrated":len(records),"frames_requested":len(pairs),
+      "frames_integrated":len(records),"frames_requested":requested,
+      "integration_stride":int(integration_stride),
+      "evaluation_frames_excluded_from_map":requested-len(records),
       "voxel_m":voxel_m,"occupancy_voxel_m":occupancy_m,
       "mesh_vertices":len(mesh.vertices),"mesh_triangles":len(mesh.triangles),
       "surface_points":len(surface.points),"occupied_3d_voxels":occ3d,
@@ -244,10 +249,12 @@ def main():
     parser.add_argument("--occupancy-voxel",type=float,default=.12)
     parser.add_argument("--tsdf-side",type=int,default=320)
     parser.add_argument("--ray-stride",type=int,default=20)
+    parser.add_argument("--integration-stride",type=int,default=1)
     args=parser.parse_args()
     pairs=synchronized(download_scene(args.dataset))
     reconstruct(pairs,args.output,voxel_m=args.voxel,occupancy_m=args.occupancy_voxel,
                 frame_limit=args.max_frames,pose_file=args.pose_json,floor_z=args.floor_z,
-                tsdf_side=args.tsdf_side,rays_stride=args.ray_stride)
+                tsdf_side=args.tsdf_side,rays_stride=args.ray_stride,
+                integration_stride=args.integration_stride)
 
 if __name__=="__main__":main()
