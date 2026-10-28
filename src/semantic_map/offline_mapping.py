@@ -204,7 +204,9 @@ def reconstruct(pairs,folder,voxel_m=.06,occupancy_m=.12,frame_limit=0,
     occ3d=grid.export_3d_ply(folder/"occupancy_3d.ply")
     occ2d=grid.export_2d(folder,floor_z=floor_z)
     report={
-      "geometric_mapping_status":"PASS" if len(mesh.triangles)>0 and occ3d>0 else "FAIL",
+      "geometric_mapping_status":"CANDIDATE_UNVALIDATED" if len(mesh.vertices)>=5000 and len(mesh.triangles)>=7500 and len(surface.points)>=3000 and occ3d>=1000 else "FAIL_LOW_COVERAGE",
+      "geometric_accuracy_status":"NOT_TESTED_AGAINST_INDEPENDENT_GEOMETRY",
+      "integrity_thresholds":{"mesh_vertices_min":5000,"mesh_triangles_min":7500,"surface_points_min":3000,"occupied_voxels_min":1000},
       "pose_estimation_status":"NOT_TESTED" if pose_file is None else "EXTERNAL_INPUT_UNVALIDATED",
       "loop_closure_status":"NOT_TESTED",
       "object_identity_status":"NOT_ACCEPTED",
