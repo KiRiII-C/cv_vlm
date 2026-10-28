@@ -63,6 +63,7 @@ jobs:
             --out results/tum_real/reconciliation.json | tee reconciliation.log
           python -m semantic_map.visualize_real --root results/tum_real
           python -m semantic_map.replay_ablation --root results/tum_real
+          python -m semantic_map.identity_audit --root results/tum_real --out results/tum_real/identity_audit.json
       - name: Compact VLM descriptions of real RGB object crops, persist checked semantics
         run: |
           set -o pipefail
@@ -99,6 +100,10 @@ jobs:
           assert g['frames_integrated']>=500
           assert g['mesh_vertices']>=5000 and g['mesh_triangles']>=7500
           assert m['detections']>=100 and m['confirmed_tracks']>0
+          audit=json.load(open('results/tum_real/identity_audit.json'))
+          assert audit['status']=='PROXY_DIAGNOSTIC_NOT_PHYSICAL_GROUND_TRUTH'
+          assert audit['frames']==m['frames']
+          assert audit['cross_visit_matched_evidence_pairs']>=0
           recon=json.load(open('results/tum_real/reconciliation.json'))
           assert recon['post_track_count']<=recon['pre_track_count']
           assert all(x['operation'] in ('MERGED_WITH_ALIAS','REJECTED_CONFLICT') for x in recon['reconciliations'])
