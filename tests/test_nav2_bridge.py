@@ -7,8 +7,10 @@ def test_valid_goal_not_misreported_as_execution():
     out=goal_as_dict(g)
     assert out['pose']['position']=={'x':2.,'y':3.,'z':0.}
     assert out['header']['frame_id']=='map'
-    with pytest.raises(RuntimeError,match='ROS2 Jazzy'):
+    with pytest.raises(PermissionError,match='Navigation blocked'):
         send_nav2_goal(g)
+    with pytest.raises(RuntimeError,match='ROS2 Jazzy'):
+        send_nav2_goal(g,validated_navigation_map=True)
 
 def test_ambiguous_goal_rejected():
     with pytest.raises(ValueError):
