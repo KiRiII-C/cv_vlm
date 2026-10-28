@@ -26,18 +26,28 @@ jobs:
           sudo apt-get install -y libegl1 libgl1 libgomp1
           python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -e '.[test]' 'open3d==0.19.0' ultralytics matplotlib plotly
-      - name: All-frame RGB-D geometric map using independently supplied TUM benchmark poses
+      - name: Estimate all camera poses from RGB-D, no benchmark trajectory as input
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.visual_odometry             --data "$RUNNER_TEMP/tum" --output results/vo_mapping | tee vo.log
+      - name: Optimize verified loop closures without GT
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.pose_graph             --poses results/vo_mapping/estimated_poses.json             --vo results/vo_mapping/vo_evaluation.json             --out results/vo_mapping --data "$RUNNER_TEMP/tum" | tee posegraph.log
+      - name: All-frame RGB-D geometric map using independently estimated corrected camera poses
         run: |
           set -o pipefail
           python -u -m semantic_map.offline_mapping \
             --dataset "$RUNNER_TEMP/tum" --output results/full_geometry \
-            --max-frames 0 --voxel .06 --tsdf-side 320 | tee geometry.log
+            --max-frames 0 --voxel .06 --tsdf-side 320 \
+            --pose-json results/vo_mapping/optimized_poses.json | tee geometry.log
       - name: All-frame real pretrained instance segmentation, global persistent object memory
         run: |
           set -o pipefail
           python -u -m semantic_map.tum_yolo_pipeline \
             --data "$RUNNER_TEMP/tum" --output results/tum_real \
-            --model yolo11n-seg.pt --max-frames 0 | tee semantic.log
+            --model yolo11n-seg.pt --max-frames 0 \
+            --pose-json results/vo_mapping/optimized_poses.json | tee semantic.log
       - name: Ground real operator commands in real object map and occupancy evidence
         run: |
           set -o pipefail
@@ -51,7 +61,12 @@ jobs:
           g=json.load(open('results/full_geometry/mapping_report.json'))
           m=json.load(open('results/tum_real/real_mapping_report.json'))
           p=json.load(open('results/operator_e2e/operator_e2e.json'))
+          v=json.load(open('results/vo_mapping/posegraph_evaluation.json'))
+          assert not v['gt_used_in_optimization']
+          assert v['optimizer_status']=='APPLIED',v
+          assert v['nonlocal_loops_verified']>0
           assert g['frames_integrated']==m['frames']==p['frames_integrated']
+          assert m['uses_reference_poses'] is False,m
           assert g['frames_integrated']>=500
           assert g['mesh_vertices']>=5000 and g['mesh_triangles']>=7500
           assert m['detections']>=100 and m['confirmed_tracks']>0
@@ -68,9 +83,12 @@ jobs:
         with:
           name: complete-rgbd-offline-e2e-candidate
           path: |
+            results/vo_mapping/
             results/full_geometry/
             results/tum_real/
             results/operator_e2e/
+            vo.log
+            posegraph.log
             geometry.log
             semantic.log
             operator.log
