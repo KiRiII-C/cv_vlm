@@ -6,6 +6,7 @@ on:
       - src/semantic_map/operator_e2e.py
       - src/semantic_map/tum_yolo_pipeline.py
       - src/semantic_map/vlm_enrich.py
+      - src/semantic_map/floor_alignment.py
       - .github/workflows/real-end-to-end.yml
   workflow_dispatch:
 permissions:
@@ -43,6 +44,10 @@ jobs:
             --dataset "$RUNNER_TEMP/tum" --output results/full_geometry \
             --max-frames 0 --voxel .06 --tsdf-side 320 \
             --pose-json results/vo_mapping/optimized_poses.json | tee geometry.log
+      - name: Gravity-aligned 2D free/occupied map from reconstructed RGB-D geometry
+        run: |
+          set -o pipefail
+          OMP_NUM_THREADS=3 python -u -m semantic_map.floor_alignment             --geometry results/full_geometry             --out results/gravity_map | tee gravity.log
       - name: All-frame real pretrained instance segmentation, global persistent object memory
         run: |
           set -o pipefail
@@ -57,7 +62,7 @@ jobs:
           set -o pipefail
           python -u -m semantic_map.operator_e2e \
             --memory results/tum_real --geometry results/full_geometry \
-            --output results/operator_e2e | tee operator.log
+            --output results/operator_e2e             --gravity results/gravity_map | tee operator.log
       - name: Compact VLM descriptions of selected real RGB object crops (immutable IDs)
         run: |
           set -o pipefail
@@ -70,6 +75,9 @@ jobs:
           g=json.load(open('results/full_geometry/mapping_report.json'))
           m=json.load(open('results/tum_real/real_mapping_report.json'))
           p=json.load(open('results/operator_e2e/operator_e2e.json'))
+          floor=json.load(open('results/gravity_map/gravity_report.json'))
+          assert floor['floor_detection']=='PLAUSIBLE_PLANE',floor
+          assert floor['inflated_traversable_cells']>10,floor
           vlm=json.load(open('results/vlm_semantics/vlm_semantics.json'))
           assert vlm['objects_described']>=3 and vlm['identity_changes']==0,vlm
           assert all(x['vlm_text'] for x in vlm['descriptions']),vlm
@@ -97,11 +105,13 @@ jobs:
           path: |
             results/vo_mapping/
             results/full_geometry/
+            results/gravity_map/
             results/tum_real/
             results/operator_e2e/
             vo.log
             posegraph.log
             geometry.log
+            gravity.log
             semantic.log
             operator.log
             vlm.log
