@@ -7,6 +7,7 @@ on:
       - src/semantic_map/tum_yolo_pipeline.py
       - src/semantic_map/vlm_enrich.py
       - src/semantic_map/floor_alignment.py
+      - src/semantic_map/offline_reconcile.py
       - .github/workflows/real-end-to-end.yml
   workflow_dispatch:
 permissions:
@@ -55,6 +56,9 @@ jobs:
             --data "$RUNNER_TEMP/tum" --output results/tum_real \
             --model yolo11n-seg.pt --max-frames 0 \
             --pose-json results/vo_mapping/optimized_poses.json | tee semantic.log
+          python -u -m semantic_map.offline_reconcile \
+            --db results/tum_real/semantic_memory.sqlite \
+            --out results/tum_real/reconciliation.json | tee reconciliation.log
           python -m semantic_map.visualize_real --root results/tum_real
           python -m semantic_map.replay_ablation --root results/tum_real
       - name: Ground real operator commands in real object map and occupancy evidence
@@ -90,6 +94,9 @@ jobs:
           assert g['frames_integrated']>=500
           assert g['mesh_vertices']>=5000 and g['mesh_triangles']>=7500
           assert m['detections']>=100 and m['confirmed_tracks']>0
+          recon=json.load(open('results/tum_real/reconciliation.json'))
+          assert recon['post_track_count']<=recon['pre_track_count']
+          assert all(x['operation'] in ('MERGED_WITH_ALIAS','REJECTED_CONFLICT') for x in recon['reconciliations'])
           assert p['unknown_cells_blocked'] and p['robot_actuation']=='NOT_EXECUTED'
           assert len(p['queries'])>=5
           assert all(q['status'] in ('planned','route_candidate_unvalidated_map','ambiguous','not_found','unresolved','unreachable') for q in p['queries'])
@@ -113,6 +120,7 @@ jobs:
             geometry.log
             gravity.log
             semantic.log
+            reconciliation.log
             operator.log
             vlm.log
           retention-days: 30
