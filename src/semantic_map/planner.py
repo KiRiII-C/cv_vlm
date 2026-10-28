@@ -67,16 +67,33 @@ def _object_name(t):
 class CommandProcessor:
     COLORS={'красн':'red','син':'blue','зел':'green','желт':'yellow','бел':'white','черн':'black',
             'red':'red','blue':'blue','green':'green','yellow':'yellow','фиолет':'purple','purple':'purple'}
-    SYN={'стул':'chair','стуль':'chair','chair':'chair','кресл':'chair','стол':'table','table':'table',
-         'диван':'sofa','sofa':'sofa','ламп':'lamp','lamp':'lamp','шкаф':'cabinet','cabinet':'cabinet',
-         'растен':'plant','plant':'plant','двер':'door','door':'door'}
+    SYN={'стул':'chair','стуль':'chair','chair':'chair','кресл':'chair',
+         'стол':'table','table':'table','desk':'table','dining table':'table',
+         'диван':'sofa','sofa':'sofa','couch':'sofa',
+         'ламп':'lamp','lamp':'lamp','шкаф':'cabinet','cabinet':'cabinet',
+         'растен':'plant','plant':'plant','двер':'door','door':'door',
+         'клавиатур':'keyboard','keyboard':'keyboard',
+         'монитор':'tv','телевизор':'tv','экран':'tv','screen':'tv','tv':'tv',
+         'книг':'book','book':'book',
+         'ноутбук':'laptop','laptop':'laptop',
+         'мышк':'mouse','mouse':'mouse',
+         'чашк':'cup','кружк':'cup','cup':'cup',
+         'бутылк':'bottle','bottle':'bottle',
+         'телефон':'cell phone','phone':'cell phone',
+         'пульт':'remote','remote':'remote'}
     def __init__(self,tracks,grid:OccupancyGrid,robot_xy=(.5,.5),robot_yaw=0.,radius=.18):
         self.tracks=[t for t in tracks if t.state=='confirmed']
         self.grid=grid;self.robot_xy=np.asarray(robot_xy,dtype=float)
         self.yaw=float(robot_yaw);self.radius=radius
     def _matches(self,q):
-        q=q.lower();cats={v for k,v in self.SYN.items() if k in q}
+        q=q.lower()
+        uuid_match=re.search(r'obj_[a-f0-9]{16}',q)
+        if uuid_match:
+            return [t for t in self.tracks if t.object_id.lower()==uuid_match.group()]
+        cats={v for k,v in self.SYN.items() if k in q}
         colors={v for k,v in self.COLORS.items() if k in q}
+        # Reject unrecognized object references rather than silently search every object.
+        if not cats and not colors:return []
         return [t for t in self.tracks if (not cats or t.label.lower() in cats)
                 and (not colors or any(color in _object_name(t) for color in colors))]
     def _candidates(self,xy,rmin=.6,rmax=1.1):
