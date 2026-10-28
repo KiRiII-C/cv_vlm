@@ -27,13 +27,15 @@
     },
     "object_reidentification_gt": {
       "status": "FAIL",
-      "evidence": "YOLOE-26s-seg 12 classes + 2-stage RGBD tracker evaluated on Hypersim physical GT. On diverse ai_002_001 baseline IDF1_target 0.30928 vs temporal multiview 0.27692 vs MobileNetV3 temporal 0.26733 (all hard-gated, no merges). Crowded ai_005_001 chairs baseline 0.02592, hardened multiview 0.02863 (one false merge), MobileNetV3 multiview 0.03015 (zero false merges), oracle masks 0.96984. Robust re-identification goal NOT met; no improvement claimed across scenes.",
-      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40761795172",
-      "limits": "Hypersim synthetic photorealistic GT positions and 19 frames; model uses RGB images but GT 3D point locations; excludes SLAM, real robot, out-of-distribution scenes."
+      "evidence": "ObjectMemoryV2 static 3D risk-aware gallery and review queue implemented. On frozen YOLOE26 detections, development ai_002_001 target IDF1 0.30928 -> 0.32692 and ai_005_001 0.02592 -> 0.04769 (0 false merges), BUT independent unseen ai_017_001 decreased 0.35178 -> 0.34749; on unseen oracle masks decreased 0.95527 -> 0.94236 although false merges fell 1 -> 0. Physical ID robustness NOT ACCEPTED.",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40766680560",
+      "fixed_input_regression": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40766015906",
+      "limits": "Hypersim photo-real synthetic, GT world 3D coordinates; 19 RGB-D frames per scene, YOLOE26 mask quality remains dominant bottleneck. Does not evaluate SLAM or on-robot."
     },
     "loop_closure_object_reprojection": {
-      "status": "NOT_TESTED",
-      "evidence": "No completed correction/reassociation"
+      "status": "IMPLEMENTED_UNVALIDATED",
+      "evidence": "ObjectMemoryV2.correct_pose_graph atomically reprojects every original RGB-D camera-frame observation, preserves UUIDs, fails closed on missing poses; marks NEEDS_REASSOCIATION. Separate persistent object-surface voxel layer is NOT automatically rebuilt after pose graph correction, nor have loop-closure pose sequences been validated end-to-end.",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40767306241"
     },
     "semantic_vlm": {
       "status": "IMPLEMENTED_UNVALIDATED",
@@ -170,6 +172,52 @@
       },
       "reid_requirement": "FAIL",
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40761795172"
+    },
+    "memory_v2_identical_observation_development": {
+      "status": "PASS",
+      "scope": "Hypersim ai_002_001 + ai_005_001 DEVELOPER-TUNED scenes; fixed true YOLOE26 observations, GT physical instance ID for evaluation only",
+      "diverse": {
+        "legacy": 0.30927835,
+        "v2": 0.32692308,
+        "merges_v2": 0
+      },
+      "crowded_chairs": {
+        "legacy": 0.02591793,
+        "v2": 0.04768583,
+        "merges_v2": 0
+      },
+      "oracle_diverse": {
+        "legacy": 0.90987124,
+        "v2": 0.97619048
+      },
+      "oracle_crowded": {
+        "legacy": 0.96983582,
+        "v2": 0.99775785
+      },
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40766015906",
+      "conclusion": "Improved only in these development scenarios; NOT generalization"
+    },
+    "memory_v2_independent_scene": {
+      "status": "PASS",
+      "scope": "Completed independent measurement only, not system ReID acceptance",
+      "scene": "Hypersim ai_017_001 selected by number of GT target physical IDs without inspecting model performance",
+      "yoloe_target_idf1_legacy": 0.3517786561,
+      "yoloe_target_idf1_v2": 0.3474903475,
+      "oracle_target_idf1_legacy": 0.9552669553,
+      "oracle_target_idf1_v2": 0.9423631124,
+      "oracle_false_merges_legacy": 1,
+      "oracle_false_merges_v2": 0,
+      "conclusion": "NO independent IDF1 improvement; release gate stays FAIL",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40766680560"
+    },
+    "object_memory_v2_durable_surface_and_relocation_smoke": {
+      "status": "PASS",
+      "scope": "Synthetic tests and 40 real TUM YOLOE26 frames only; persistent per-UUID RGBD point voxels, negative ray evidence, pose correction, relocation proofs; no physical GT guarantee",
+      "detector": "yoloe-26s-seg.pt",
+      "frames": 40,
+      "mask_observations": 330,
+      "confirmed_track_candidates": 22,
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40765935458"
     }
   }
 }
