@@ -48,7 +48,10 @@ class SemanticMapper:
         if t.hits>=min_hits:t.state='confirmed'
         return t
 
-    def process_frame(self,observations):
+    def process_frame(self,observations,prior_ids=None):
+        # Short-term 2D/3D tracks supply SOFT hypotheses, not authority to
+        # override world geometry, map version, or a competing co-visible ID.
+        prior_ids=prior_ids or {}
         if not observations:return []
         keys={o.key for o in observations}
         if len(keys)!=len(observations):raise ValueError('Duplicate detection keys within frame')
@@ -88,7 +91,12 @@ class SemanticMapper:
         for i,(_,o) in enumerate(candidates):
             for j,t in enumerate(tracks):
                 s=score_variant(t,o,self.association_mode)
-                if s is not None:scores[i,j]=s
+                if s is not None:
+                    # A temporal association can only improve an already
+                    # plausible 3D-global match; impossible matches stay gated.
+                    if prior_ids.get(o.detection_id)==t.object_id and s>=.52:
+                        s=min(1.0,s+.055)
+                    scores[i,j]=s
         # Global one-to-one Hungarian: same track can be assigned once per frame.
         if scores.size:
             r,c=linear_sum_assignment(-scores)
