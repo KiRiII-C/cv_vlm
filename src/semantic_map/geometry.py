@@ -54,7 +54,12 @@ def make_observation(depth, mask, K: Intrinsics, T_map_cam, *, source, frame_id,
     high = np.quantile(points,.95,axis=0)
     high = np.maximum(high,low+.015)
     center = np.median(points,axis=0)
+    # Retain camera-frame evidence to reproject object coordinates after SLAM
+    # pose-graph optimization without inventing a new UUID.
+    T=np.asarray(T_map_cam,dtype=float)
+    center_cam=(center-T[:3,3])@T[:3,:3]
     return Observation(source=source,frame_id=str(frame_id),detection_id=str(detection_id),
                        label=label,center=center,low=low,high=high,timestamp=float(timestamp),
                        appearance=appearance,description=description,confidence=confidence,
-                       map_version=map_version,map_id=map_id)
+                       map_version=map_version,map_id=map_id,
+                       center_cam=center_cam,T_map_cam=T)
