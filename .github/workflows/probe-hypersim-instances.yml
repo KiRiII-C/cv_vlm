@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - run: python -m pip install -q requests
+      - run: python -m pip install -q requests numpy h5py
       - name: Inspect official Apple Hypersim ZIP remote range and per-pixel 3D instance GT
         run: |
           python - <<'PY'
@@ -50,3 +50,5 @@ jobs:
               print('HYPERSIM_DEPTH_SAMPLES',[x for x in names if 'depth_meters.hdf5' in x][:8],flush=True)
               print('HYPERSIM_POSITION_SAMPLES',[x for x in names if '.position.hdf5' in x][:8],flush=True)
           PY
+      - name: Inspect actual physical-ID, class and true 3D XYZ arrays
+        run: python -u src/semantic_map/hypersim_range.py
