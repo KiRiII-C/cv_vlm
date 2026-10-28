@@ -4,6 +4,7 @@ on:
     branches: [feature/semantic-memory-mapping]
     paths:
       - .github/workflows/hypersim-yoloe26-reid.yml
+      - src/semantic_map/hypersim_instance_eval.py
   workflow_dispatch:
 permissions: {contents: read}
 concurrency:
@@ -55,8 +56,11 @@ jobs:
           assert len(j['closed_vocabulary_class_list'])==12
           assert j['gt_is_physically_stable_across_frames']
           assert j['estimated_camera_pose']=='NOT_TESTED'
+          assert j['target_vocabulary_gt']['gt_observations']>0
           print('ACTUAL_INSTANCE_ID_METRICS',j['mode'],j['detector_model'],
-                'IDF1',j['IDF1_observation_level'],'splits',j['false_split_gt_objects'],
+                'IDF1_all',j['IDF1_observation_level'],
+                'IDF1_target',j['target_vocabulary_gt']['IDF1_observation_level'],
+                'splits',j['false_split_gt_objects'],
                 'merges',j['false_merge_predicted_ids'],'gt_obs',j['gt_observations'])
           PY
       - if: always()
@@ -89,10 +93,12 @@ jobs:
               results.append({'model':j['detector_model'],
                               'tracker':j.get('short_term_temporal_enabled'),
                               'association':j['global_association_mode'],
-                              'IDF1':j['IDF1_observation_level'],
+                              'IDF1_all':j['IDF1_observation_level'],
+                              'IDF1_target':j['target_vocabulary_gt']['IDF1_observation_level'],
+                              'target_gt_observations':j['target_vocabulary_gt']['gt_observations'],
                               'splits':j['false_split_gt_objects'],
                               'merges':j['false_merge_predicted_ids']})
-          results.sort(key=lambda x:x['IDF1'],reverse=True)
+          results.sort(key=lambda x:x['IDF1_target'],reverse=True)
           pathlib.Path('comparison.json').write_text(json.dumps({'results':results,
               'claim':'Physical instance identity on one synthetic GT scene only; no SLAM evaluation',
               'best_on_this_split':results[0] if results else None},indent=2))
