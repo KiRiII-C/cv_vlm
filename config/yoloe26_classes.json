@@ -1,5 +1,5 @@
 {
-  "model": "yoloe-26s-seg.pt",
+  "model": "yoloe-26x-seg.pt",
   "classes": [
     "chair",
     "table",
