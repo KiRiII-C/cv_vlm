@@ -2,7 +2,7 @@ name: Diagnose RGB-D TSDF loss
 on:
   push:
     branches: [feature/semantic-memory-mapping]
-    paths: [.github/workflows/diagnose-tsdf.yml]
+    paths: [.github/workflows/diagnose-tsdf.yml, scripts/debug_tsdf.py]
   workflow_dispatch:
 permissions:
   contents: read
