@@ -61,7 +61,7 @@ jobs:
           set -o pipefail
           python -u -m semantic_map.tum_yolo_pipeline \
             --data "$RUNNER_TEMP/tum" --output results/tum_real \
-            --model yoloe-26s-seg.pt --classes-json config/yoloe26_classes.json --conf .23 --max-frames 0 \
+            --model yoloe-26s-seg.pt --classes-json config/yoloe26_classes.json --conf .23 --max-frames 0 --memory-engine v2 --persist-object-surfaces \
             --pose-json results/vo_mapping/optimized_poses.json | tee semantic.log
           python -u -m semantic_map.offline_reconcile \
             --db results/tum_real/semantic_memory.sqlite \
