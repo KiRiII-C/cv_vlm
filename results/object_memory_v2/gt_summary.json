@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-28",
+  "pipeline": "YOLOE-26s-seg 12 prompt classes -> world XYZ -> physical UUID memory",
+  "memory_release_gate": "FAIL",
+  "scope": "Hypersim synthetic RGB-D with GT physical instance IDs and GT world 3D points; SLAM not tested",
+  "development_test": {
+    "scene_names": [
+      "ai_002_001",
+      "ai_005_001"
+    ],
+    "detector_frozen_observations": true,
+    "notes": "Class-specific spatial gates changed after inspecting these two scenes; these are DEVELOPMENT measurements and not evidence of held-out generalization.",
+    "cases": [
+      {
+        "scene": "ai_002_001",
+        "mask_source": "YOLOE26",
+        "old_idf1": 0.30927835051546393,
+        "v2_idf1": 0.3269230769230769,
+        "v2_false_merges": 0
+      },
+      {
+        "scene": "ai_005_001",
+        "mask_source": "YOLOE26",
+        "old_idf1": 0.02591792656587473,
+        "v2_idf1": 0.047685834502103785,
+        "v2_false_merges": 0
+      },
+      {
+        "scene": "ai_002_001",
+        "mask_source": "GT oracle",
+        "old_idf1": 0.9098712446351931,
+        "v2_idf1": 0.9761904761904762,
+        "v2_false_merges": 0
+      },
+      {
+        "scene": "ai_005_001",
+        "mask_source": "GT oracle",
+        "old_idf1": 0.96983581519664,
+        "v2_idf1": 0.9977578475336323,
+        "v2_false_merges": 0
+      }
+    ],
+    "github_actions_url": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40766015906"
+  },
+  "independent_heldout_test": {
+    "scene": "ai_017_001",
+    "selected_using": "GT count of physical target instances BEFORE running model; at least 27 instances visible across 5 probed frames",
+    "oracle_masks": {
+      "old_target_idf1": 0.9552669552669553,
+      "v2_target_idf1": 0.9423631123919308,
+      "false_merges_old": 1,
+      "false_merges_v2": 0
+    },
+    "YOLOE26_real_masks": {
+      "old_target_idf1": 0.35177865612648224,
+      "v2_target_idf1": 0.3474903474903475,
+      "false_merges_old": 0,
+      "false_merges_v2": 0
+    },
+    "conclusion": "FAILED generalization of IDF1 advantage: V2 slightly worse on held-out scene even when false merges can decrease.",
+    "github_actions_url": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40766680560"
+  },
+  "integration": {
+    "yoloe26_real_tum_frames": 40,
+    "model_detections": 330,
+    "persistent_colored_rgbd_surface_voxels": true,
+    "sensor_world_pose_source": "TUM reference for smoke; non-GT VO separately available",
+    "testing_scope": "technical smoke, NOT GT physical-ID accuracy",
+    "github_actions_url": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40765935458"
+  },
+  "claims_blocked": [
+    "perfect physical ID uniqueness",
+    "end-to-end SLAM robustness",
+    "Nav2 robot motion",
+    "cross-scene IDF1 superiority",
+    "pose-corrected surface map without full RGB-D replay"
+  ]
+}
