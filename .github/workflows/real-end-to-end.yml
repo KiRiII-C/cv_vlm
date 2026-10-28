@@ -116,6 +116,7 @@ jobs:
             results/gravity_map/
             results/tum_real/
             results/operator_e2e/
+            results/vlm_semantics/
             vo.log
             posegraph.log
             geometry.log
