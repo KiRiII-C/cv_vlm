@@ -86,7 +86,7 @@ def hsv_feature(rgb,mask):
     return (a/np.linalg.norm(a)).tolist()
 
 def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yolo11n-seg.pt',
-                    confidence=.30,max_frames=0,voxel=.07,pose_json=None):
+                    confidence=.30,max_frames=0,voxel=.07,pose_json=None,device='cpu'):
     from ultralytics import YOLO
     from matplotlib import pyplot as plt
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
@@ -108,7 +108,7 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
         depth=cv2.imread(str(depthname),cv2.IMREAD_UNCHANGED)
         if rgb is None or depth is None or rgb.shape[:2]!=depth.shape:raise ValueError('Invalid TUM frame')
         vox.add_frame(depth,K,T,'tum_freiburg1_desk',str(stamp),stride=8)
-        result=det.predict(source=rgb,conf=confidence,retina_masks=True,verbose=False,device='cpu',imgsz=640)[0]
+        result=det.predict(source=rgb,conf=confidence,retina_masks=True,verbose=False,device=device,imgsz=640)[0]
         observations=[];view_rects=[];display=rgb.copy()
         if result.masks is not None and result.boxes is not None:
             masks=result.masks.data.cpu().numpy();ids=result.boxes.cls.int().cpu().tolist()
@@ -188,6 +188,6 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--data',default='data/tum');p.add_argument('--output',default='results/tum_real');
-    p.add_argument('--model',default='yolo11n-seg.pt');p.add_argument('--conf',type=float,default=.3);p.add_argument('--max-frames',type=int,default=0);p.add_argument('--pose-json',default=None)
-    a=p.parse_args();infer_benchmark(a.data,a.output,a.model,a.conf,a.max_frames,pose_json=a.pose_json)
+    p.add_argument('--model',default='yolo11n-seg.pt');p.add_argument('--conf',type=float,default=.3);p.add_argument('--max-frames',type=int,default=0);p.add_argument('--pose-json',default=None);p.add_argument('--device',default='cpu',help='Ultralytics device, e.g. cpu or 0 for CUDA')
+    a=p.parse_args();infer_benchmark(a.data,a.output,a.model,a.conf,a.max_frames,pose_json=a.pose_json,device=a.device)
 if __name__=='__main__':main()
