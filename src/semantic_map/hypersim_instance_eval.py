@@ -69,10 +69,11 @@ def evaluate_identity(observations,total_gt):
 
 def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
         mode='oracle_masks',max_objects=36,model_name='yolo11n-seg.pt',confidence=.25,
-        temporal_tracking=False,association_mode='fused',classes_json=None):
+        temporal_tracking=False,association_mode='fused',classes_json=None,
+        scene='ai_001_001'):
     out=Path(out);out.mkdir(exist_ok=True,parents=True)
     from PIL import Image
-    remote,z=open_scene()
+    remote,z=open_scene(scene)
     detector=None
     if mode=='predicted_yolo_masks':
         detector=build_detector(model_name,class_list(classes_json),
@@ -91,8 +92,8 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
     evidence=[];target_evidence=[];target_unique=set();target_gt_total=0
     gt_frame_ids=defaultdict(list);first_rgb=None;first_world=None;first_gt=None
     try:
-        root='ai_001_001/images/'
-        scene_meta=z.read('ai_001_001/_detail/metadata_scene.csv').decode('utf-8')
+        root=f'{scene}/images/'
+        scene_meta=z.read(f'{scene}/_detail/metadata_scene.csv').decode('utf-8')
         metadata=dict(csv.reader(io.StringIO(scene_meta)))
         scale=float(metadata['meters_per_asset_unit'])
         framecount=0;total_gt=0;missing=[]
@@ -198,7 +199,7 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
             'detector_model':model_name if mode=='predicted_yolo_masks' else 'ORACLE_GT_MASKS',
             'detector_confidence':confidence if mode=='predicted_yolo_masks' else None,
             'status':'PHYSICAL_INSTANCE_GT_EVALUATION',
-            'mode':mode,'scene':'ai_001_001','metric_world_scale':scale,
+            'mode':mode,'scene':scene,'metric_world_scale':scale,
             'gt_is_physically_stable_across_frames':True,
             'used_actual_rgb_in_oracle_appearance':True,
             'uses_GT_semantic_classes_for_oracle':mode=='oracle_masks',
@@ -226,11 +227,13 @@ def main():
     p.add_argument('--model',default='yolo11n-seg.pt')
     p.add_argument('--conf',type=float,default=.25)
     p.add_argument('--classes-json',default=None)
+    p.add_argument('--scene',default='ai_001_001')
+    p.add_argument('--max-objects',type=int,default=36)
     p.add_argument('--temporal',action='store_true')
     p.add_argument('--association',choices=['fused','multiview','geometry','appearance','adaptive_reid'],default='fused')
     a=p.parse_args()
     run(a.out,mode=a.mode,model_name=a.model,confidence=a.conf,
         classes_json=a.classes_json,temporal_tracking=a.temporal,
-        association_mode=a.association)
+        association_mode=a.association,scene=a.scene,max_objects=a.max_objects)
 
 if __name__=='__main__':main()
