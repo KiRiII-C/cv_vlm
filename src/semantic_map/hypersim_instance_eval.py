@@ -19,11 +19,11 @@ from .models import Observation
 from .storage import MemoryStore
 from .engine import SemanticMapper
 from .tum_yolo_pipeline import hsv_feature
-from .reid_features import hsv_spatial
+from .reid_features import hsv_spatial,AppearanceEncoder
 from .yoloe26_detector import build_detector,class_list
 from .temporal_tracker import TemporalTracker,Detection
 
-def instance_observation(world_m,rgb,mask,*,frame,detection,label,confidence,source,feature_mode='hsv'):
+def instance_observation(world_m,rgb,mask,*,frame,detection,label,confidence,source,feature_mode='hsv',appearance_override=None):
     ys,xs=np.where(mask[::4,::4])
     if len(xs)<12:return None
     pts=world_m[::4,::4][ys,xs]
@@ -32,7 +32,9 @@ def instance_observation(world_m,rgb,mask,*,frame,detection,label,confidence,sou
     low=np.quantile(pts,.07,axis=0);high=np.quantile(pts,.93,axis=0)
     high=np.maximum(high,low+.018)
     center=np.median(pts,axis=0)
-    descriptor=hsv_spatial(rgb,mask) if feature_mode=='hsv_spatial' else hsv_feature(rgb,mask)
+    descriptor=(appearance_override if appearance_override is not None else
+                hsv_spatial(rgb,mask) if feature_mode=='hsv_spatial'
+                else hsv_feature(rgb,mask))
     return Observation(source=source,frame_id=str(frame),detection_id=str(detection),
                        label=str(label),center=center,low=low,high=high,
                        timestamp=float(frame),appearance=descriptor,confidence=float(confidence),
@@ -70,7 +72,7 @@ def evaluate_identity(observations,total_gt):
 def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
         mode='oracle_masks',max_objects=36,model_name='yolo11n-seg.pt',confidence=.25,
         temporal_tracking=False,association_mode='fused',classes_json=None,
-        scene='ai_001_001'):
+        scene='ai_001_001',feature_mode='hsv_spatial'):
     out=Path(out);out.mkdir(exist_ok=True,parents=True)
     from PIL import Image
     remote,z=open_scene(scene)
@@ -84,6 +86,7 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
     temporal=TemporalTracker(high_thresh=confidence,
         low_thresh=min(.10,confidence*.55)) if temporal_tracking else None
     memory_hint={}
+    encoder=AppearanceEncoder(feature_mode,device='cpu') if temporal_tracking else None
     # These 8 NYU40 classes have explicit semantics within our 12 YOLOE
     # prompts; monitor/cup/keyboard/laptop etc may collapse into otherprop.
     # Report both FULL-SCENE IDF1 and target-vocabulary-only IDF1; never
@@ -151,7 +154,8 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
                                 uid=int(top)
                         o=instance_observation(world,im,mask,frame=k,detection=f'yolo_{jj}',
                            label=detector.class_name(c),confidence=float(prob),source=mode,
-                           feature_mode='hsv_spatial' if temporal else 'hsv')
+                           feature_mode=feature_mode if temporal else 'hsv',
+                           appearance_override=encoder(im,mask) if encoder is not None else None)
                         if o is not None:
                             observations.append(o);physical_ids.append(uid)
                             short_inputs.append(Detection(o.detection_id,o.label,
@@ -216,6 +220,7 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
             'estimated_camera_pose':'NOT_TESTED',
             'short_term_temporal_enabled':bool(temporal_tracking),
             'global_association_mode':association_mode,
+            'appearance_mode':feature_mode if temporal_tracking else 'hsv',
             'closed_vocabulary_class_list':class_list(classes_json) if mode=='predicted_yolo_masks' else None,
             'frames_evaluated':framecount,'missing_frames':missing,
             'gt_objects_reappearing_after_sampled_gap':len(return_after_gap),
@@ -238,11 +243,13 @@ def main():
     p.add_argument('--classes-json',default=None)
     p.add_argument('--scene',default='ai_001_001')
     p.add_argument('--max-objects',type=int,default=36)
+    p.add_argument('--feature-mode',choices=['hsv','hsv_spatial','mobilenetv3'],default='hsv_spatial')
     p.add_argument('--temporal',action='store_true')
     p.add_argument('--association',choices=['fused','multiview','geometry','appearance','adaptive_reid'],default='fused')
     a=p.parse_args()
     run(a.out,mode=a.mode,model_name=a.model,confidence=a.conf,
         classes_json=a.classes_json,temporal_tracking=a.temporal,
-        association_mode=a.association,scene=a.scene,max_objects=a.max_objects)
+        association_mode=a.association,scene=a.scene,max_objects=a.max_objects,
+        feature_mode=a.feature_mode)
 
 if __name__=='__main__':main()
