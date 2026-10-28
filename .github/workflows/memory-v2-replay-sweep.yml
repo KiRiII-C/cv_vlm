@@ -1,0 +1,80 @@
+name: Immutable Hypersim observations memory-replay gate sweep
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths: [.github/workflows/memory-v2-replay-sweep.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: object-memory-fixed-observations
+  cancel-in-progress: true
+jobs:
+  immutable-detections:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {scene: ai_002_001, name: diverse_yoloe, mode: predicted_yolo_masks, max_objects: 60}
+          - {scene: ai_005_001, name: similar_chairs_yoloe, mode: predicted_yolo_masks, max_objects: 130}
+          - {scene: ai_002_001, name: diverse_oracle, mode: oracle_masks, max_objects: 60}
+          - {scene: ai_005_001, name: similar_chairs_oracle, mode: oracle_masks, max_objects: 130}
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install fixed detector and evaluator
+        run: |
+          python -m pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' h5py requests pillow
+      - name: Generate single immutable observation cache from real model, GT only for scoring
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.hypersim_instance_eval \
+            --scene ${{ matrix.scene }} --max-objects ${{ matrix.max_objects }} \
+            --mode ${{ matrix.mode }} --model yoloe-26s-seg.pt \
+            --classes-json config/yoloe26_classes.json \
+            --conf .23 --memory-engine legacy \
+            --out results/${{ matrix.name }} | tee detector.log
+      - name: Replay eight memory variants on the exact same observations
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.memory_v2_replay \
+            --cache results/${{ matrix.name }}/observation_inputs_and_gt.json.gz \
+            --output results/${{ matrix.name }}/memory_sweep.json | tee sweep.log
+      - name: Compare legacy replay against original calculation
+        env:
+          INPUT_BASE: results/${{ matrix.name }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,json
+          root=os.environ['INPUT_BASE']
+          a=json.load(open(root+'/hypersim_physical_id_gt.json'))
+          b=json.load(open(root+'/memory_sweep.json'))
+          assert b['fixed_input'] and not b['gt_labels_input_to_model']
+          replay=b['variants']['legacy']['target_gt']['IDF1']
+          baseline=a['target_vocabulary_gt']['IDF1_observation_level']
+          assert abs(replay-baseline)<1e-10,(replay,baseline)
+          assert len(b['variants'])==8
+          assert b['variants']['legacy']['physical_target_count']>=5
+          print('IMMUTABLE_REPLAY_VALIDATED',root,'baseline',baseline)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fixed-observation-memory-sweep-${{ matrix.name }}
+          path: |
+            results/${{ matrix.name }}/observation_inputs_and_gt.json.gz
+            results/${{ matrix.name }}/hypersim_physical_id_gt.json
+            results/${{ matrix.name }}/memory_sweep.json
+            detector.log
+            sweep.log
+          retention-days: 30
+          if-no-files-found: warn
