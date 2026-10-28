@@ -203,7 +203,7 @@ def evaluate(scene,out,model="yoloe-26x-seg.pt",conf=.10,
          "Matched IoU>=0.10 pairs may be poor and only define a diagnostic intervention",
          "Hypersim synthetic data and GT world XYZ; not real RGB-D SLAM",
          "Delta IDF1 is not a causal additive decomposition of errors"])
-    (out/"factorial_results.json").write_text(json.dumps(report,ensure_ascii=False,indent=2))
+    (out/"factorial_results.json").write_text(json.dumps(report,ensure_ascii=False,indent=2,default=lambda x: x.item() if isinstance(x,np.generic) else x.tolist() if isinstance(x,np.ndarray) else str(x)))
     print("YOLOE26X_RESULTS",json.dumps(dict(scene=scene,model=model,
         recall50=report["diagnostics"]["recall_IoU50"],
         raw_idf1=evaluations["raw"]["target_gt"]["IDF1"],
