@@ -31,7 +31,9 @@ def enrich(root,out,max_objects=8,model_name="HuggingFaceTB/SmolVLM-256M-Instruc
     selected=[]
     for t in tracks:
         pics=sorted((root/"object_views").glob(t.object_id+"_*.jpg"))
-        if pics:selected.append((t,pics[0]))
+        # Multiple independent views: higher pixel area first, rather than
+        # accidentally picking the earliest occluded/truncated crop.
+        if pics:selected.append((t,sorted(pics,key=lambda p:p.stat().st_size,reverse=True)[:2]))
     if not selected:
         raise RuntimeError("No real object view crops: missing perception evidence")
     torch.set_num_threads(3)
@@ -46,26 +48,37 @@ def enrich(root,out,max_objects=8,model_name="HuggingFaceTB/SmolVLM-256M-Instruc
     except Exception:
         pass
     descriptions=[]
-    for track,img_path in selected:
-        image=Image.open(img_path).convert("RGB")
-        image.thumbnail((448,448))
-        msg=[{"role":"user","content":[
-            {"type":"image"},
-            {"type":"text","text":
-             "Describe the main physical object in this image in one short factual sentence. "
-             "Give color and visible distinguishing features only when clear. "
-             "If the object is ambiguous or the crop too poor, say uncertain."}]}]
-        prompt=processor.apply_chat_template(msg,add_generation_prompt=True)
-        inputs=processor(text=prompt,images=[image],return_tensors="pt")
-        started=time.time()
-        with torch.inference_mode():
-            ids=model.generate(**inputs,max_new_tokens=48,do_sample=False)
-        cut=int(inputs["input_ids"].shape[-1])
-        response=processor.batch_decode(ids[:,cut:],skip_special_tokens=True)[0].strip()
-        compatible=class_compatible(track.label,response)
-        record={"object_id":track.object_id,"detector_label":track.label,
-                "observation_count":track.hits,"image":str(img_path.relative_to(root)),
+    for track,img_paths in selected:
+        views=[]
+        for img_path in img_paths:
+            image=Image.open(img_path).convert("RGB")
+            image.thumbnail((448,448))
+            msg=[{"role":"user","content":[
+                {"type":"image"},
+                {"type":"text","text":
+                 "Describe the main physical object in this image in one short factual sentence. "
+                 "Give color and visible distinguishing features only when clear. "
+                 "If the object is ambiguous or the crop too poor, say uncertain."}]}]
+            prompt=processor.apply_chat_template(msg,add_generation_prompt=True)
+            inputs=processor(text=prompt,images=[image],return_tensors="pt")
+            started=time.time()
+            with torch.inference_mode():
+                ids=model.generate(**inputs,max_new_tokens=48,do_sample=False)
+            cut=int(inputs["input_ids"].shape[-1])
+            response=processor.batch_decode(ids[:,cut:],skip_special_tokens=True)[0].strip()
+            compatible=class_compatible(track.label,response)
+            views.append({"image":str(img_path.relative_to(root)),
                 "vlm_text":response,"time_sec":round(time.time()-started,3),
+                "class_lexically_compatible":bool(compatible)})
+        # This is a lexical agreement guard, NOT correctness validation.
+        selected_view=next((v for v in views if v["class_lexically_compatible"]),views[0])
+        compatible=bool(selected_view["class_lexically_compatible"])
+        record={"object_id":track.object_id,"detector_label":track.label,
+                "observation_count":track.hits,
+                "image":selected_view["image"],
+                "vlm_text":selected_view["vlm_text"],
+                "candidate_views":views,
+                "time_sec":round(sum(v["time_sec"] for v in views),3),
                 "validation_status":"UNVERIFIED_CONSISTENT_VLM_DESCRIPTION" if compatible else "REJECTED_SEMANTIC_DISAGREEMENT",
                 "identity_was_not_modified":True}
         descriptions.append(record)
