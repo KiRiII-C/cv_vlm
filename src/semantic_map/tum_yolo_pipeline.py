@@ -86,13 +86,15 @@ def hsv_feature(rgb,mask):
     return (a/np.linalg.norm(a)).tolist()
 
 def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yolo11n-seg.pt',
-                    confidence=.30,max_frames=0,voxel=.07):
+                    confidence=.30,max_frames=0,voxel=.07,pose_json=None):
     from ultralytics import YOLO
     from matplotlib import pyplot as plt
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
     root=download_scene(dataset)
     pairs=synchronized(root)
     if not pairs:raise RuntimeError('No synchronized posed camera frames')
+    from .offline_mapping import pose_override
+    pairs,pose_source=pose_override(pairs,pose_json)
     if max_frames>0:pairs=pairs[:max_frames]
     print('REAL_FRAMES',len(pairs),'model',model_name,flush=True)
     det=YOLO(model_name)
@@ -151,7 +153,9 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
                   'tracks_reobserved_10plus':sum(t.hits>=10 for t in tracks),
                   'identity_gt_available':False,
                   'tracking_metrics':'Cannot derive GT IDF1 or false-merge rate without annotated physical identities',
-                  'groundtruth_poses':len(pairs),'surface_voxels':vox.export_ply(output/'observed_surface.ply')})
+                  'camera_poses':len(pairs),'camera_pose_source':pose_source,
+                  'uses_reference_poses':pose_json is None,
+                  'surface_voxels':vox.export_ply(output/'observed_surface.ply')})
     stats['objects']=[{'id':t.object_id,'label':t.label,'center_xyz_m':t.center.tolist(),
                        'low_xyz_m':t.low.tolist(),'high_xyz_m':t.high.tolist(),
                        'hits':t.hits,'state':t.state,'description':t.description} for t in tracks]
@@ -168,6 +172,6 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--data',default='data/tum');p.add_argument('--output',default='results/tum_real');
-    p.add_argument('--model',default='yolo11n-seg.pt');p.add_argument('--conf',type=float,default=.3);p.add_argument('--max-frames',type=int,default=0)
-    a=p.parse_args();infer_benchmark(a.data,a.output,a.model,a.conf,a.max_frames)
+    p.add_argument('--model',default='yolo11n-seg.pt');p.add_argument('--conf',type=float,default=.3);p.add_argument('--max-frames',type=int,default=0);p.add_argument('--pose-json',default=None)
+    a=p.parse_args();infer_benchmark(a.data,a.output,a.model,a.conf,a.max_frames,pose_json=a.pose_json)
 if __name__=='__main__':main()
