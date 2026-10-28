@@ -1,4 +1,4 @@
-name: Stop obsolete depth-completion run
+name: Stop superseded end-to-end experiment runs
 on:
   push:
     branches:
@@ -19,7 +19,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          run_id=40691890610
+          for run_id in 40709284371 40709383734; do
           endpoint="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel"
           status=$(curl -sS -X POST -o /tmp/cancel-response.json -w '%{http_code}' \
             -H 'Accept: application/vnd.github+json' \
@@ -31,3 +31,4 @@ jobs:
             409) echo "Run is no longer cancellable (typically already completed)" ;;
             *) cat /tmp/cancel-response.json; exit 1 ;;
           esac
+          done
