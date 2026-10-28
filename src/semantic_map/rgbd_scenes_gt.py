@@ -145,6 +145,29 @@ def metrics(ytrue,ypred):
                          for k,c in enumerate(ids)},
             'confusion_matrix':cm.tolist()}
 
+def class_union_localization(xyz,ytrue,ypred,min_support=80):
+    """GT vs predicted class *union* 3D center and axis-aligned bbox.
+    
+    Does not separate physical instances when a class contains multiple objects.
+    GT labels are used ONLY for this evaluation.
+    """
+    out={}
+    for c in sorted(set(np.unique(ytrue))|set(np.unique(ypred))):
+        if c==10:continue
+        A=xyz[ytrue==c];B=xyz[ypred==c]
+        if len(A)<min_support or len(B)<min_support:continue
+        lowA=A.min(axis=0);highA=A.max(axis=0)
+        lowB=B.min(axis=0);highB=B.max(axis=0)
+        intersection=np.maximum(0.,np.minimum(highA,highB)-np.maximum(lowA,lowB))
+        vA=np.prod(np.maximum(0.,highA-lowA))
+        vB=np.prod(np.maximum(0.,highB-lowB))
+        iou=float(np.prod(intersection)/max(vA+vB-np.prod(intersection),1e-9))
+        out[str(c)]={'label':LABELS.get(int(c),str(c)),'gt_points':int(len(A)),
+                     'prediction_points':int(len(B)),
+                     'centroid_distance_m':float(np.linalg.norm(A.mean(axis=0)-B.mean(axis=0))),
+                     'class_union_aabb_3d_iou':iou}
+    return out
+
 def save_colored_ply(path,xyz,labels):
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
     rgb=np.array([COLORS.get(int(x),(0,0,0)) for x in labels],dtype=np.uint8)
@@ -211,6 +234,7 @@ def train_and_evaluate(root,out,max_train=40000,max_eval=60000,seed=20261028,
             xyz,rgb,y=dataset[scene]
             prediction=est.predict(local_features(xyz,rgb,mode))
             stat=metrics(y,prediction)
+            stat['class_union_3d_localization']=class_union_localization(xyz,y,prediction)
             scene_stats[str(scene)]=stat
             overall_y.append(y);overall_pred.append(prediction)
             if mode==modes[-1]:
