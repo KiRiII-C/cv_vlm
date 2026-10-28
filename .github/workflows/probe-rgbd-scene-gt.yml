@@ -1,0 +1,40 @@
+name: Probe independent 3D semantic GT RGBD-Scenes V2
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths: [.github/workflows/probe-rgbd-scene-gt.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify official RGB-D Scenes V2 3D annotations and pose archive
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          import urllib.request,zipfile
+          from pathlib import Path
+          url='https://rgbd-dataset.cs.washington.edu/dataset/rgbd-scenes-v2/rgbd-scenes-v2_pc.zip'
+          dest=Path('/tmp/rgbd-scenes-v2_pc.zip')
+          try:
+              print('DOWNLOAD',url,flush=True)
+              urllib.request.urlretrieve(url,dest)
+              print('BYTES',dest.stat().st_size,flush=True)
+              with zipfile.ZipFile(dest) as z:
+                  names=z.namelist()
+                  print('ENTRIES',len(names),flush=True)
+                  print('SAMPLE',names[:50],flush=True)
+                  for name in [n for n in names if n.endswith('.label')][:2]:
+                      with z.open(name) as f:
+                          print('LABEL',name,f.read(700).decode('latin1'),flush=True)
+                  for name in [n for n in names if n.endswith('.ply')][:1]:
+                      with z.open(name) as f:
+                          print('PLY',name,f.read(600).decode('latin1'),flush=True)
+          except Exception as e:
+              print('OFFICIAL_SOURCE_UNAVAILABLE',repr(e),flush=True)
+              raise
+          PY
