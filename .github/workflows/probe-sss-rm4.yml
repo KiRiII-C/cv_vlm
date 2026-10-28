@@ -26,7 +26,7 @@ jobs:
               ('segmentation','100iy1BvCF_Vyj9uWn1Z4F81fUJIVZAvR'),
               ('camera_poses','1iDCXbRAAdyuEIQmQGx0e81AFGJ8tbTL2')]:
               dest=root/(name+'.download')
-              r=subprocess.run(['gdown','--id',id,'-O',str(dest)],capture_output=True,text=True,timeout=150)
+              r=subprocess.run(['gdown',f'https://drive.google.com/uc?id={id}','-O',str(dest)],capture_output=True,text=True,timeout=150)
               print('GT_DOWNLOAD',name,r.returncode,r.stdout[-900:],r.stderr[-900:],flush=True)
               if r.returncode!=0:continue
               print('GT_BYTES',name,dest.stat().st_size,flush=True)
