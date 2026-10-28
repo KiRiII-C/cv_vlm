@@ -88,7 +88,7 @@ def hsv_feature(rgb,mask):
     a=np.sqrt(hist.ravel().astype(float)+1e-8)
     return (a/np.linalg.norm(a)).tolist()
 
-def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yoloe-26s-seg.pt',
+def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yoloe-26x-seg.pt',
                     confidence=.27,max_frames=0,voxel=.07,pose_json=None,device='cpu',
                     classes_json=None,temporal_tracking=True,appearance_mode='hsv_spatial',
                     memory_engine='legacy',persist_object_surfaces=False):
@@ -269,7 +269,7 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--data',default='data/tum');p.add_argument('--output',default='results/tum_real')
-    p.add_argument('--model',default='yoloe-26s-seg.pt')
+    p.add_argument('--model',default='yoloe-26x-seg.pt')
     p.add_argument('--classes-json',default='config/yoloe26_classes.json')
     p.add_argument('--conf',type=float,default=.27);p.add_argument('--max-frames',type=int,default=0)
     p.add_argument('--pose-json',default=None);p.add_argument('--device',default='cpu')
