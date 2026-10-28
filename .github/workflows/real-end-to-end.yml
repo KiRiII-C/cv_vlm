@@ -12,6 +12,9 @@ on:
       - src/semantic_map/planner.py
       - .github/workflows/real-end-to-end.yml
   workflow_dispatch:
+concurrency:
+  group: rgbd-full-e2e-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
