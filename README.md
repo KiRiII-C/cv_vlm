@@ -199,7 +199,7 @@ correct physical object identification.
 
 ## YOLOE-26 migration and tracking (current)
 
-- Default **YOLOE-26s-seg.pt** (official open-vocabulary instance masks),
+- Default **YOLOE-26x-seg.pt** (official open-vocabulary instance masks; prior YOLOE-26s results retained for historical comparison),
   **12 fixed classes** in config/yoloe26_classes.json.
 - TemporalTracker tracks 3D geometry + 2D bbox/mask overlap +
   masked spatial HSV (optional MobileNetV3 features). ByteTrack-like
@@ -208,9 +208,12 @@ correct physical object identification.
   class and pose-version gates, conservative short-term hints, and
   up to eight distinct multi-view descriptors per object.
 - Run: bash scripts/run_offline_e2e.sh (YOLO_DEVICE=0 to use RTX CUDA).
-- Direct detector smoke: 40 actual TUM frames, 330 segmentation masks,
-  20 confirmed track *candidates*, 15,538 colored 3D points:
-  [GitHub Actions](https://github.com/KiRiII-C/cv_vlm/actions/runs/40759845090).
+- Current YOLOE-26x detector+ObjectMemoryV2 smoke: 40 TUM RGB-D frames,
+  398 usable observations, 24 confirmed UUID *candidates*,
+  20,112 color-coded 3D points:
+  [YOLOE26x CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/40770733315).
+  Earlier 26s smoke was 330 detections under DIFFERENT confidence (.23),
+  so these are not directly comparable accuracy measurements.
 - Physical GT evaluation: Hypersim, selected target-only scenes. Initial
   ai_001_001 contains only one target-class GT physical object; no broad
   conclusions are valid from that scene. Expanded tests compare ai_002_001
@@ -259,3 +262,28 @@ UUID, а не на класс детектора или краткосрочны
 ~~~bash
 YOLO_DEVICE=0 bash scripts/run_offline_e2e.sh
 ~~~
+
+
+## Проверка всех четырёх ошибок YOLOE-26x (29.10.2026)
+
+Официальная YOLOE-26x-seg.pt с теми же 12 фиксированными классами:
+две сцены Hypersim по 20 кадров, 7 controlled interventions на одинаковых
+предсказаниях YOLOE и ObjectMemoryV2. При IoU ≥0.5 recall реальных
+объектных масок: 38.10% на разной мебели и **6.94%** на множестве
+похожих стульев. В групповой сцене mean mask IoU=49.96%,
+44.20% пикселей прогнозной маски выходят за собственный GT-объект.
+Исправление только классов там не меняет IDF1, исправление границ
+масок повышает IDF1 с 19.17% до 24.12%, а GT-добавление
+пропущенных экземпляров даёт диагностическую верхнюю границу
+95.99%. Эталонные добавления **не являются реальным алгоритмом**.
+
+[Протокол гипотез и методика](docs/yoloe26x_error_factorial.md).
+[Проверенный семивариантный эксперимент](https://github.com/KiRiII-C/cv_vlm/actions/runs/40769982699).
+[Проверенная чувствительность к порогу confidence](https://github.com/KiRiII-C/cv_vlm/actions/runs/40770506902).
+
+Во всех экспериментах Hypersim использованы **GT 3D XYZ**,
+и физический GT-ID только для оценки/названных oracle-вмешательств;
+это не проверка SLAM. Observation IDF1 использует диагностическое
+соответствие IoU≥0.10, поэтому не эквивалентен строгому MOT IDF1
+на IoU≥0.50. Вне GT-масок физическая стабильность ID остаётся
+НЕ ПРИНЯТА.
