@@ -43,18 +43,35 @@ def nearest_candidate_label(t):
     label=t.label.lower()
     return {"dining table":"table","tv":"tv","keyboard":"keyboard","laptop":"laptop"}.get(label,label)
 
-def run(memory_dir,geom_dir,output_dir):
+def run(memory_dir,geom_dir,output_dir,gravity_dir=None):
     from matplotlib import pyplot as plt
     memroot=Path(memory_dir);geomroot=Path(geom_dir);out=Path(output_dir)
     out.mkdir(parents=True,exist_ok=True)
     report=json.loads((geomroot/"mapping_report.json").read_text())
-    grid,values=load_grid(geomroot)
+    navroot=Path(gravity_dir) if gravity_dir else geomroot
+    gravity=None;Tnav=np.eye(4)
+    if gravity_dir:
+        gravity=json.loads((navroot/"gravity_report.json").read_text())
+        if gravity["floor_detection"]!="PLAUSIBLE_PLANE":
+            raise RuntimeError("Cannot plan on nonvalidated floor estimate")
+        Tnav=np.asarray(gravity["T_aligned_map"],np.float64)
+    grid,values=load_grid(navroot)
     poses=json.loads((geomroot/"poses_used.json").read_text())["poses"]
-    camera_xy=np.array(poses[0]["T_map_cam"])[:2,3]
+    camera_world=np.array(poses[0]["T_map_cam"])[:3,3]
+    camera_xy=(Tnav[:3,:3]@camera_world+Tnav[:3,3])[:2]
     start=select_start(grid,values,camera_xy)
     store=MemoryStore(memroot/"semantic_memory.sqlite")
     tracks=[t for t in store.tracks() if t.state=="confirmed" and t.hits>=8]
-    for t in tracks:t.label=nearest_candidate_label(t)
+    for t in tracks:
+        t.label=nearest_candidate_label(t)
+        if gravity_dir:
+            # Convert entire object cuboid to plane-aligned coordinates.
+            low,high=t.low.copy(),t.high.copy()
+            corners=np.asarray([[x,y,z] for x in (low[0],high[0])
+                                for y in (low[1],high[1]) for z in (low[2],high[2])])
+            transformed=corners@Tnav[:3,:3].T+Tnav[:3,3]
+            t.center=t.center@Tnav[:3,:3].T+Tnav[:3,3]
+            t.low=transformed.min(0);t.high=transformed.max(0)
     processor=CommandProcessor(tracks,grid,robot_xy=start or [0,0],radius=.15) if start is not None else None
     distinct=sorted({t.label for t in tracks})
     query=[
@@ -86,7 +103,7 @@ def run(memory_dir,geom_dir,output_dir):
                "goal_xy_m":d.goal_xy,"path_xy":d.path_xy,
                "explanation":d.explanation,"source":"offline_astar_not_nav2"}
         if d.status=="planned":
-            if bool(report.get("occupancy_2d",{}).get("nav_ready")):
+            if bool(report.get("occupancy_2d",{}).get("nav_ready")) and gravity_dir is None:
                 entry["nav2_goal_candidate_not_executed"]=goal_as_dict(d)
             else:
                 # A diagnostic (uncalibrated) occupancy projection is NEVER a
@@ -100,7 +117,9 @@ def run(memory_dir,geom_dir,output_dir):
         "frames_integrated":report.get("frames_integrated"),
         "identity_verified_with_GT":False,
         "robot_actuation":"NOT_EXECUTED",
-        "navigation_map_ready":bool(report.get("occupancy_2d",{}).get("nav_ready")),
+        "navigation_map_ready":False if gravity_dir else bool(report.get("occupancy_2d",{}).get("nav_ready")),
+        "gravity_aligned_offline_map":bool(gravity_dir),
+        "gravity_planar_evidence":gravity["candidate_status"] if gravity else None,
         "unknown_cells_blocked":True,
         "simulated_robot_xy_m":start,
         "confirmed_tracks_used":len(tracks),
@@ -119,7 +138,7 @@ def run(memory_dir,geom_dir,output_dir):
     if start is not None:
         ax.scatter(*start,c="tab:green",s=80,marker="*",label="Simulated start")
     for k,a in enumerate(answer):
-        if a["status"]=="planned":
+        if a["status"] in ("planned","route_candidate_unvalidated_map"):
             route=np.array(a["path_xy"])
             ax.plot(route[:,0],route[:,1],lw=1.8,label=f"route{k}")
     ax.set(xlabel="World map X (m)",ylabel="World map Y (m)",
@@ -137,6 +156,7 @@ def main():
     p.add_argument("--memory",default="results/tum_real")
     p.add_argument("--geometry",default="results/full_geometry")
     p.add_argument("--output",default="results/operator_e2e")
+    p.add_argument("--gravity",default=None)
     a=p.parse_args()
-    run(a.memory,a.geometry,a.output)
+    run(a.memory,a.geometry,a.output,a.gravity)
 if __name__=='__main__':main()
