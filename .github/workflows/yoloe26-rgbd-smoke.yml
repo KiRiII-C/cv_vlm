@@ -5,6 +5,9 @@ on:
     paths:
       - .github/workflows/yoloe26-rgbd-smoke.yml
       - src/semantic_map/yoloe26_detector.py
+      - src/semantic_map/tum_yolo_pipeline.py
+      - src/semantic_map/object_memory_v2.py
+      - src/semantic_map/object_surface_memory_v2.py
       - config/yoloe26_classes.json
   workflow_dispatch:
 permissions: {contents: read}
@@ -37,7 +40,8 @@ jobs:
           python -u -m semantic_map.tum_yolo_pipeline \
             --data "$RUNNER_TEMP/tum" --output results/yoloe26_12classes_rgbd \
             --model yoloe-26s-seg.pt --classes-json config/yoloe26_classes.json \
-            --conf .23 --max-frames 40 --device cpu --appearance hsv_spatial | tee yoloe26.log
+            --conf .23 --max-frames 40 --device cpu --appearance hsv_spatial \
+            --memory-engine v2 --persist-object-surfaces | tee yoloe26.log
       - name: Acceptance is pipeline smoke, NOT GT physical instance ID accuracy
         shell: bash
         run: |
@@ -48,6 +52,9 @@ jobs:
           assert r['frames']==40,r
           assert r['model']=='yoloe-26s-seg.pt',r
           assert r['temporal_enabled'] is True,r
+          assert r['memory_engine']=='v2',r
+          assert r['persistent_instance_surface_map']['vertices']>0,r
+          assert r['object_memory_v2']['confirmed_query'],r
           assert len(r['configured_classes'])==12,r
           assert r['detections']>0 and r['confirmed_tracks']>0,r
           assert r['identity_gt_available'] is False,r
