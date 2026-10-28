@@ -176,8 +176,17 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
                         memory_hint[a.short_id]=d.object_id
             if len(decisions)!=len(physical_ids):raise AssertionError('Observation association mismatch')
             evidence.extend([(uid,d.object_id) for uid,d in zip(physical_ids,decisions)])
-            target_evidence.extend([(uid if uid in target_visible else None,d.object_id)
-                                    for uid,d in zip(physical_ids,decisions)])
+            if mode=="oracle_masks":
+                # The oracle emits all NYU40 categories, unlike the bounded
+                # 12-class model. Non-target oracle masks are out of scope,
+                # NOT false positives of a target-only detector.
+                target_evidence.extend([(uid,d.object_id)
+                    for uid,d in zip(physical_ids,decisions) if uid in target_visible])
+            else:
+                # YOLOE explicitly predicts ONLY target classes. Its masks
+                # on other physical categories are true target false positives.
+                target_evidence.extend([(uid if uid in target_visible else None,d.object_id)
+                    for uid,d in zip(physical_ids,decisions)])
             framecount+=1
             if framecount%5==0:
                 print('HYPERSIM_ID_PROGRESS',mode,framecount,'/',len(frames),'tracks',len(store.tracks()),flush=True)
