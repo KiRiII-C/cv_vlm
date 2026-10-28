@@ -134,13 +134,22 @@ class Net(nn.Module):
                 mask=F.unfold(obs,3,padding=1).transpose(1,2)
                 logits=(q*k).sum(-1)/(c**.5)
                 if mode=="geo_attn":
-                    yy,xx=torch.meshgrid(torch.arange(h),torch.arange(w),indexing="ij")
-                    xyz=torch.cat([z*((xx-w/2)/(525*w/640))[None,None],
-                                   z*((yy-h/2)/(525*h/480))[None,None],z],dim=1)
+                    # Build a proxy query XYZ using ONLY observed neighboring depth.
+                    # Thus geometric attention remains active when central depth is hidden.
+                    yy,xx=torch.meshgrid(torch.arange(h,device=z.device),
+                                         torch.arange(w,device=z.device),indexing="ij")
+                    nx=(xx-w/2)/(525*w/640)
+                    ny=(yy-h/2)/(525*h/480)
+                    xyz=torch.cat([z*nx[None,None],z*ny[None,None],z],dim=1)
                     neigh=F.unfold(xyz,3,padding=1).reshape(b,3,9,h*w).permute(0,3,2,1)
-                    center=xyz.permute(0,2,3,1).reshape(b,h*w,1,3)
-                    query_valid=obs.flatten(2).transpose(1,2)
-                    logits=logits-self.geo_scale.abs()*((neigh-center)**2).sum(-1)*query_valid
+                    neigh_z=F.unfold(z,3,padding=1).transpose(1,2)
+                    # Fill missing query depth by the local observed mean (no GT leakage).
+                    avg_z=(neigh_z*mask).sum(-1,keepdim=True)/mask.sum(-1,keepdim=True).clamp_min(1)
+                    q_z=torch.where(obs.flatten(2).transpose(1,2)>.5,
+                                    z.flatten(2).transpose(1,2),avg_z)
+                    query_ray=torch.stack([nx,ny,torch.ones_like(nx)],dim=-1).reshape(1,h*w,1,3)
+                    anchor=q_z.unsqueeze(-1)*query_ray
+                    logits=logits-self.geo_scale.abs()*((neigh-anchor)**2).sum(-1)
                 logits=logits.masked_fill(mask<.5,-1e4)
                 prob=logits.softmax(-1)*mask
                 prob=prob/prob.sum(-1,keepdim=True).clamp_min(1e-8)
@@ -175,7 +184,7 @@ def run():
              "train_frame_ids":[[x["group"],x["id"]] for x in train],
              "test_frame_ids":[[x["group"],x["id"]] for x in test],
              "train_frames":14,"test_frames":6,
-             "epochs":5,"seed":20261028,"input_resolution":[80,64],"models":{},
+             "epochs":25,"seed":20261028,"input_resolution":[80,64],"models":{},
              "notes":["Two published RGB-D datasets, no object supervision",
                       "Approximate pinhole calibration for geometric bias",
                       "Different parameter budgets; 20 images are insufficient for generalization claims"]}
@@ -184,7 +193,7 @@ def run():
         model=Net(mode)
         opt=torch.optim.AdamW(model.parameters(),lr=.002)
         started=time.perf_counter()
-        for ep in range(5):
+        for ep in range(25):
             losses=[]
             order=np.random.default_rng(20261028+ep).permutation(len(train))
             model.train()
@@ -200,6 +209,23 @@ def run():
         results["models"][mode]={"metrics":score(model,test),
                                   "parameters":sum(p.numel() for p in model.parameters()),
                                   "train_seconds":round(time.perf_counter()-started,2)}
+        # Classical inpainting baseline: no learned RGB-D fusion.
+    telea={}
+    for g in ("scribble","freiburg1_xyz","all"):telea[g]=[0.,0.,0]
+    for i,x in enumerate(test):
+        rgb,z,obs,miss,target=sample(x,9876+100*i)
+        zin=z[0,0].numpy().astype("float32")
+        missing=(miss[0,0].numpy()>.5).astype("uint8")
+        pred=cv2.inpaint(zin,missing,3,cv2.INPAINT_TELEA)
+        err=pred-target[0,0].numpy()
+        for g in (x["group"],"all"):
+            telea[g][0]+=float(((err**2)*missing).sum())
+            telea[g][1]+=float((abs(err)*missing).sum())
+            telea[g][2]+=int(missing.sum())
+    results["models"]["opencv_telea"]={"metrics":{g:{
+        "rmse_m":(v[0]/v[2])**.5,"mae_m":v[1]/v[2],
+        "valid_test_pixels":v[2]} for g,v in telea.items()},
+        "parameters":0,"train_seconds":0}
     Path("results.json").write_text(json.dumps(results,indent=2))
     print("FINAL_METRICS",json.dumps(results["models"]),flush=True)
 
