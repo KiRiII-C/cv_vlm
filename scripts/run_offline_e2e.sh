@@ -8,7 +8,7 @@ export MKL_NUM_THREADS=3
 export OPENBLAS_NUM_THREADS=2
 DATA="${TUM_DATA:-data/tum}"
 OUTPUT="${OUTPUT_DIR:-results/offline_full}"
-YOLO_MODEL="${YOLO_MODEL:-yoloe-26s-seg.pt}"
+YOLO_MODEL="${YOLO_MODEL:-yoloe-26x-seg.pt}"
 YOLO_DEVICE="${YOLO_DEVICE:-cpu}"
 mkdir -p "$OUTPUT"/{vo,geometry,gravity,semantic,vlm,operator}
 echo '[1/9] RGB-D ORB+PnP camera pose estimation'
