@@ -1,0 +1,107 @@
+name: YOLOE26 real-model vs temporal/multiview ablation on physical instance GT
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/hypersim-yoloe26-reid.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: hypersim-yoloe26-reid
+  cancel-in-progress: true
+jobs:
+  same-physical-gt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: yoloe26_global_fused
+            extra: --association fused
+          - label: yoloe26_temporal_fused
+            extra: --temporal --association fused
+          - label: yoloe26_temporal_multiview
+            extra: --temporal --association multiview
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install YOLOE-26 and Hypersim GT dependencies
+        run: |
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' h5py requests pillow
+      - name: Score actual YOLOE-26s masks against identical physical GT instances
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.hypersim_instance_eval \
+            --mode predicted_yolo_masks --model yoloe-26s-seg.pt \
+            --classes-json config/yoloe26_classes.json \
+            --conf .23 ${{ matrix.extra }} \
+            --out results/hypersim_${{ matrix.label }} | tee hypersim.log
+      - name: Verify GT instance ID evaluation (not SLAM)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,glob
+          j=json.load(open(glob.glob('results/hypersim_*/hypersim_physical_id_gt.json')[0]))
+          assert j['physical_gt_id_evaluation']=='YES'
+          assert j['frames_evaluated']>=10 and j['gt_observations']>=100
+          assert len(j['closed_vocabulary_class_list'])==12
+          assert j['gt_is_physically_stable_across_frames']
+          assert j['estimated_camera_pose']=='NOT_TESTED'
+          print('ACTUAL_INSTANCE_ID_METRICS',j['mode'],j['detector_model'],
+                'IDF1',j['IDF1_observation_level'],'splits',j['false_split_gt_objects'],
+                'merges',j['false_merge_predicted_ids'],'gt_obs',j['gt_observations'])
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hypersim-${{ matrix.label }}-GT-results
+          path: |
+            results/hypersim_${{ matrix.label }}/hypersim_physical_id_gt.json
+            hypersim.log
+          retention-days: 30
+          if-no-files-found: warn
+  compare:
+    needs: [same-physical-gt]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: hypersim-yoloe26_*-GT-results
+          merge-multiple: false
+          path: gathered
+      - name: Ablation comparison without false positive improvement claims
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,glob,pathlib
+          results=[]
+          for p in glob.glob('gathered/**/hypersim_physical_id_gt.json',recursive=True):
+              j=json.load(open(p))
+              results.append({'model':j['detector_model'],
+                              'tracker':j.get('short_term_temporal_enabled'),
+                              'association':j['global_association_mode'],
+                              'IDF1':j['IDF1_observation_level'],
+                              'splits':j['false_split_gt_objects'],
+                              'merges':j['false_merge_predicted_ids']})
+          results.sort(key=lambda x:x['IDF1'],reverse=True)
+          pathlib.Path('comparison.json').write_text(json.dumps({'results':results,
+              'claim':'Physical instance identity on one synthetic GT scene only; no SLAM evaluation',
+              'best_on_this_split':results[0] if results else None},indent=2))
+          print('GT_ABLATION_COMPARISON',json.dumps(results))
+          if len(results)!=3:raise SystemExit('Incomplete 3-mode comparison, no best architecture')
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hypersim-yoloe26-physical-id-comparison
+          path: comparison.json
+          if-no-files-found: warn
