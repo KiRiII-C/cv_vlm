@@ -1,0 +1,63 @@
+name: RGB-D Scenes v2 GT 3D semantic benchmark
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - '.github/workflows/rgbd-scenes-semantic-gt.yml'
+      - 'src/semantic_map/rgbd_scenes_gt.py'
+      - 'tests/test_semantic_groundtruth.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fourteen-scene-semantic-ground-truth:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install semantic benchmark dependencies
+        run: |
+          python -m pip install -e '.[test]' scikit-learn plotly
+      - name: Validate test split and 3D class scoring
+        run: python -m pytest -q tests/test_semantic_groundtruth.py
+      - name: Load the official 14 GT 3D RGB-D Scenes v2 scans; split by scene
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.rgbd_scenes_gt \
+            --data "$RUNNER_TEMP/rgbd-scenes-v2" \
+            --out results/semantic_gt_v2 \
+            --max-train 20000 --max-eval 40000 | tee benchmark.log
+      - name: Evaluate validity of independent scene holdout and semantic metrics
+        run: |
+          python - <<'PY'
+          import json,math
+          r=json.load(open('results/semantic_gt_v2/gt_semantic_metrics.json'))
+          assert not set(r['train_scenes']) & set(r['test_scenes']),r
+          assert len(r['train_scenes'])>=8 and len(r['test_scenes'])>=3,r
+          assert r['physical_instance_groundtruth'] is False,r
+          assert len(r['ablation'])==4,r
+          for name,entry in r['ablation'].items():
+              m=entry['overall']
+              assert math.isfinite(m['accuracy']),name
+              assert 0<=m['accuracy']<=1,name
+              assert math.isfinite(m['mIoU_present_classes']),name
+              assert len(entry['per_scene'])==4,name
+          print('SEMANTIC_GT_SCENE_DISJOINT_MEASUREMENT_COMPLETED')
+          PY
+      - name: Preserve 3D semantic predictions and GT color-coded visualizations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actual-rgbd-scenes-v2-3d-semantic-gt
+          path: |
+            results/semantic_gt_v2/
+            benchmark.log
+          retention-days: 30
+          if-no-files-found: warn
