@@ -34,13 +34,17 @@ class ObjectSurfaceMemoryV2:
           CREATE INDEX IF NOT EXISTS idx_surface_uuid_v2 ON object_surface_v2(uuid,map_id);
           CREATE TABLE IF NOT EXISTS surface_frame_v2 (
             map_id TEXT NOT NULL,uuid TEXT NOT NULL,source TEXT NOT NULL,
-            frame_id TEXT NOT NULL,PRIMARY KEY(map_id,uuid,source,frame_id)
+            frame_id TEXT NOT NULL,pose_version INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(map_id,uuid,source,frame_id)
           );''')
+        cols={x[1] for x in self.db.execute('PRAGMA table_info(surface_frame_v2)').fetchall()}
+        if 'pose_version' not in cols:
+            self.db.execute('ALTER TABLE surface_frame_v2 ADD COLUMN pose_version INTEGER NOT NULL DEFAULT 0')
         self.db.commit()
 
     def _indices(self,points):return np.floor(np.asarray(points)/self.voxel_m).astype('int32')
 
-    def integrate_mask(self,uuid,depth,mask,rgb,K,T_map_cam,*,source,frame_id,map_id='default',timestamp=0.,pixel_stride=2,max_depth_m=5.):
+    def integrate_mask(self,uuid,depth,mask,rgb,K,T_map_cam,*,source,frame_id,map_id='default',timestamp=0.,pixel_stride=2,max_depth_m=5.,pose_version=0):
         """Fuse observed instance surface pixels; a frame is always idempotent."""
         if pixel_stride<1:raise ValueError('Invalid pixel stride')
         depth=np.asarray(depth);mask=np.asarray(mask,bool);rgb=np.asarray(rgb)
@@ -49,6 +53,10 @@ class ObjectSurfaceMemoryV2:
         if depth.shape!=(K.height,K.width):raise ValueError('Camera calibration does not match images')
         T=np.asarray(T_map_cam,float)
         if T.shape!=(4,4) or not np.isfinite(T).all():raise ValueError('Invalid T_map_cam')
+        versions={int(row[0]) for row in self.db.execute('''SELECT DISTINCT pose_version
+            FROM surface_frame_v2 WHERE map_id=?''',(map_id,))}
+        if versions and versions!={int(pose_version)}:
+            raise RuntimeError('Surface map has another pose-graph version: reset and re-integrate RGB-D evidence first')
         existing=self.db.execute('''SELECT 1 FROM surface_frame_v2
             WHERE map_id=? AND uuid=? AND source=? AND frame_id=?''',
             (map_id,uuid,source,str(frame_id))).fetchone()
@@ -82,8 +90,9 @@ class ObjectSurfaceMemoryV2:
                  sum_r=sum_r+excluded.sum_r,sum_g=sum_g+excluded.sum_g,sum_b=sum_b+excluded.sum_b,
                  support=support+excluded.support,
                  negative=MAX(0,negative-1),last_evidence=excluded.last_evidence''',rows)
-            self.db.execute('INSERT INTO surface_frame_v2 VALUES(?,?,?,?)',
-                            (map_id,uuid,source,str(frame_id)))
+            self.db.execute('''INSERT INTO surface_frame_v2
+                    (map_id,uuid,source,frame_id,pose_version) VALUES(?,?,?,?,?)''',
+                            (map_id,uuid,source,str(frame_id),int(pose_version)))
         return len(world)
 
     def refute_visible_cells(self,uuid,verified_free_xyz,*,map_id='default',timestamp=0.):
@@ -104,10 +113,28 @@ class ObjectSurfaceMemoryV2:
                 [(float(timestamp),map_id,str(uuid),int(i),int(j),int(k)) for i,j,k in keys])
         return len(keys)
 
-    def export(self,path,*,map_id='default',instance_colors=True):
+    def reset_for_pose_rebuild(self,*,map_id='default'):
+        """Invalidate stale surface voxels; caller MUST replay all original RGB-D."""
+        with self.db:
+            self.db.execute('DELETE FROM object_surface_v2 WHERE map_id=?',(map_id,))
+            self.db.execute('DELETE FROM surface_frame_v2 WHERE map_id=?',(map_id,))
+
+    def export(self,path,*,map_id='default',instance_colors=True,confirmed_only=True):
+        observed_versions={int(row[0]) for row in self.db.execute('''SELECT DISTINCT pose_version
+            FROM surface_frame_v2 WHERE map_id=?''',(map_id,))}
+        has_object_table=bool(self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='objects'").fetchone())
+        current_versions=({int(row[0]) for row in self.db.execute('''SELECT DISTINCT map_version
+            FROM objects WHERE map_id=? AND state != 'merged' ''',(map_id,))}
+            if has_object_table else set())
+        if observed_versions and current_versions and observed_versions!=current_versions:
+            raise RuntimeError('Stale UUID voxel map after SLAM correction: re-integrate all RGB-D frames')
         data=self.db.execute('''SELECT uuid,ix,iy,iz,sum_x,sum_y,sum_z,sum_r,sum_g,sum_b,support,negative
           FROM object_surface_v2 WHERE map_id=? ORDER BY uuid,ix,iy,iz''',(map_id,)).fetchall()
-        valid=[r for r in data if r[10]>=self.min_support and r[11]<3]
+        confirmed=({r[0] for r in self.db.execute('''SELECT object_id FROM objects
+            WHERE map_id=? AND state='confirmed' ''',(map_id,))}
+            if has_object_table else {r[0] for r in data})
+        valid=[r for r in data if r[10]>=self.min_support and r[11]<3 and
+               (not confirmed_only or r[0] in confirmed)]
         uuids=sorted({row[0] for row in valid})
         dictionary={uid:i+1 for i,uid in enumerate(uuids)}
         path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
@@ -121,7 +148,10 @@ class ObjectSurfaceMemoryV2:
                 uid,ix,iy,iz,sx,sy,sz,sr,sg,sb,count,neg=row
                 color=object_color(uid) if instance_colors else tuple(int(round(v/count)) for v in (sr,sg,sb))
                 f.write(f'{sx/count:.5f} {sy/count:.5f} {sz/count:.5f} {color[0]} {color[1]} {color[2]} {dictionary[uid]} {count}\n')
-        meta={'map_id':map_id,'voxel_size_m':self.voxel_m,'vertices':len(valid),
+        meta={'map_id':map_id,'voxel_size_m':self.voxel_m,
+              'pose_graph_versions_observed':sorted(observed_versions),
+              'only_confirmed_uuids':bool(confirmed_only),
+              'vertices':len(valid),
               'unique_ids':len(uuids),'instances':{str(dictionary[uid]):{'uuid':uid,'rgb':object_color(uid)} for uid in uuids},
               'negative_policy':'Suppress only after 3 independently verified free-space contradictions',
               'source':'actual observed RGBD mask voxels; GT is not implied'}
