@@ -1,0 +1,78 @@
+name: End-to-end real RGB-D semantic map and operator goal evaluation
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - src/semantic_map/operator_e2e.py
+      - .github/workflows/real-end-to-end.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      OMP_NUM_THREADS: '3'
+      MKL_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install CPU perception plus geometry
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test]' 'open3d==0.19.0' ultralytics matplotlib plotly
+      - name: All-frame RGB-D geometric map using independently supplied TUM benchmark poses
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.offline_mapping \
+            --dataset "$RUNNER_TEMP/tum" --output results/full_geometry \
+            --max-frames 0 --voxel .06 --tsdf-side 320 | tee geometry.log
+      - name: All-frame real pretrained instance segmentation, global persistent object memory
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.tum_yolo_pipeline \
+            --data "$RUNNER_TEMP/tum" --output results/tum_real \
+            --model yolo11n-seg.pt --max-frames 0 | tee semantic.log
+      - name: Ground real operator commands in real object map and occupancy evidence
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.operator_e2e \
+            --memory results/tum_real --geometry results/full_geometry \
+            --output results/operator_e2e | tee operator.log
+      - name: End-to-end integrity and safety assertions, NOT an ID/SLAM/Nav2 accuracy claim
+        run: |
+          python - <<'PY'
+          import json
+          g=json.load(open('results/full_geometry/mapping_report.json'))
+          m=json.load(open('results/tum_real/real_mapping_report.json'))
+          p=json.load(open('results/operator_e2e/operator_e2e.json'))
+          assert g['frames_integrated']==m['frames']==p['frames_integrated']
+          assert g['frames_integrated']>=500
+          assert g['mesh_vertices']>=5000 and g['mesh_triangles']>=7500
+          assert m['detections']>=100 and m['confirmed_tracks']>0
+          assert p['unknown_cells_blocked'] and p['robot_actuation']=='NOT_EXECUTED'
+          assert len(p['queries'])>=5
+          assert all(q['status'] in ('planned','ambiguous','not_found','unresolved','unreachable') for q in p['queries'])
+          assert all(q.get('nav2_goal_candidate_not_executed') is None for q in p['queries'] if q['status']!='planned')
+          assert p['identity_verified_with_GT'] is False
+          print('END_TO_END_PIPELINE_INTEGRITY_CHECK_PASS',g['frames_integrated'],m['detections'])
+          print('CAVEAT: independent SLAM, physical ID stability, robot Nav2 control are NOT validated')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: complete-rgbd-offline-e2e-candidate
+          path: |
+            results/full_geometry/
+            results/tum_real/
+            results/operator_e2e/
+            geometry.log
+            semantic.log
+            operator.log
+          retention-days: 30
+          if-no-files-found: warn
