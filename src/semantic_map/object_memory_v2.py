@@ -120,10 +120,22 @@ class ObjectMemoryV2:
         # cannot alone overrule spatial evidence.
         return max(sims) if len(sims)==1 else .65*max(sims)+.35*float(np.median(sims))
 
+    # Static 3D identity safety gates; inflated/corrupt masks must not make
+    # nearby lookalike chairs geometrically interchangeable. Movement needs
+    # a separate relocation hypothesis, not an automatic UUID teleport.
+    DEFAULT_STATIC_REID_RADIUS={
+        'chair':.45,'cup':.12,'mouse':.18,'keyboard':.30,
+        'laptop':.36,'tv':.42,'potted plant':.50,
+        'table':1.10,'cabinet':.90,'sofa':1.30,
+        'bed':1.50,'bookshelf':1.10,
+    }
+
     def _score(self,t,o):
         if t.map_id!=o.map_id or t.map_version!=o.map_version:return -1.
         if self._category(t.label)!=self._category(o.label):return -1.
         distance=float(np.linalg.norm(t.center-o.center))
+        cap=self.DEFAULT_STATIC_REID_RADIUS.get(self._category(t.label))
+        if cap is not None and distance>cap:return -1.
         gap=np.maximum(0.,np.maximum(t.low,o.low)-np.minimum(t.high,o.high))
         surface_gap=float(np.linalg.norm(gap))
         size=max(.18,min(1.2,float(np.linalg.norm(t.high-t.low)*.48)))
