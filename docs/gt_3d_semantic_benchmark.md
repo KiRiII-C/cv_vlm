@@ -81,6 +81,44 @@ Modified full real TUM 596-frame e2e:
   https://github.com/KiRiII-C/cv_vlm/actions/runs/40752675350
 - Source: src/semantic_map/instance_cloud.py, dense_scene_viz.py, tum_yolo_pipeline.py
 
+## D. True physical-instance ID evaluation on Hypersim (synthetic, metrically registered)
+
+- Official Apple source: https://github.com/apple/ml-hypersim
+- This **second dataset** provides per-pixel real physical instance-ID, NYU-style
+  semantic class labels and exact world-space XYZ, unlike RGB-D Scenes v2.
+- To avoid the 1.9 TB complete download, the CI reads ONLY selected compressed
+  HDF5/RGB members from official per-scene 2.25GB ZIP over HTTP byte ranges.
+- Scene ai_001_001, 19 sampled views (frame 36 unavailable), **54 unique physical
+  GT IDs**, 272 object-visibility occurrences; GT scene scale 0.0254m/asset unit.
+- Controlled inputs (same 3D GT world positions for *all* modes, so this is
+  NOT VO/SLAM validation): (i) oracle semantic instance masks, (ii) actual
+  pretrained YOLO11n-seg masks; (iii) larger YOLO11s-seg/conf0.15 masks.
+- Actual predicted track UUIDs come from our *unchanged* global
+  SemanticMapper/Hungarian/appearance+3D association; GT physical IDs are
+  used ONLY for evaluation, not as predicted UUIDs. Oracle mode also uses GT
+  semantic class for association, explicitly an upper-bound experiment.
+
+| Per physical GT ID benchmark | Oracle GT masks | YOLO11n-seg | YOLO11s-seg conf0.15 |
+|---|---:|---:|---:|
+| GT instances visible over sample | 54 | 54 | 54 |
+| GT instance observations | 272 | 272 | 272 |
+| Predicted/matched observations | 272 | 53 | 75 |
+| **IDF1** | **0.93050** | **0.22713** | **0.19315** |
+| GT objects erroneously split into multiple UUIDs | 3 | 4 | 8 |
+| Predicted UUIDs observed on two distinct GT instances | 0 | 0 | 0 |
+| GT observation false negatives (IDFN) | 31 | 236 | 241 |
+
+- Reproduced run: https://github.com/KiRiII-C/cv_vlm/actions/runs/40756179656
+- Implementation: src/semantic_map/hypersim_range.py,
+  src/semantic_map/hypersim_instance_eval.py,
+  tests/test_hypersim_physical_identity.py.
+- **Acceptance: FAIL for direct RGB+Depth YOLO-based physical object tracking.**
+  The pretrained detector's low detection coverage and model vocabulary
+  dominate errors, despite much better association under oracle masks.
+  Larger model + lower threshold **did not improve** actual IDF1.
+  Neither zero observed false merges nor a high oracle benchmark is proof
+  of duplicate-free behavior on independent real-world scenes.
+
 ## Acceptance status
 
 **PASS for these restricted measurements**: actual 3D semantic per-point
@@ -92,9 +130,4 @@ two-scene 3D semantic GT evaluation.
 on a dataset with physical GT IDs, fully validated 3D instance AP, and real
 robot Nav2 navigation. No "best final scientific architecture" claim.
 
-Hypersim (https://github.com/apple/ml-hypersim) provides instance-ID GT,
-depth and camera data but the public full dataset is ~1.9 TB; it requires an
-additional genuinely independent physical-ID benchmark on a manageable subset
-before passing object re-identification acceptance. ShanghaiTech SSS data
-probe could not download its Google-Drive assets through the CI runner, so it
-was not incorrectly scored.
+Hypersim was successfully evaluated on a selective 19-frame sampled subset; model IDF1 is insufficient (see section D). A multi-scene, real-robot and GT instance-level end-to-end benchmark is still required. ShanghaiTech SSS data probe could not download its Google-Drive assets through CI; no fabricated SSS metrics.
