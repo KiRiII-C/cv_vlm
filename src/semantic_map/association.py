@@ -42,6 +42,21 @@ def score(track,obs):
 def score_variant(track,obs,mode="fused"):
     """Controlled association ablations (no pretrained appearance learning here)."""
     if mode=="fused":return score(track,obs)
+    if mode=="multiview":
+        # Gallery acts as a soft signal only AFTER the existing hard XYZ,
+        # label, map and single-view consistency gates have passed.
+        base=score(track,obs)
+        if base is None:return None
+        gallery=track.attributes.get("visual_gallery",[])
+        if obs.appearance is None or not gallery:return base
+        try:
+            views=[np.asarray(v,dtype=float) for v in gallery]
+            similarities=[float(v@obs.appearance) for v in views if v.shape==obs.appearance.shape]
+        except (ValueError,TypeError):
+            return base
+        if not similarities:return base
+        best=max(similarities)
+        return float(min(1.,max(0.,base+.11*max(0.,best-.55))))
     if mode=="adaptive_reid":
         base=score(track,obs)
         if track.map_id!=obs.map_id or track.map_version!=obs.map_version or track.label!=obs.label:
