@@ -1,10 +1,10 @@
 """Read only named Hypersim files from huge official ZIP via byte-range reads."""
 from __future__ import annotations
 import io,zipfile
-import requests
 
 class RangeFile:
     def __init__(self,url,timeout=60):
+        import requests
         self.url=url;self.s=requests.Session();self.timeout=timeout;self.pos=0
         r=self.s.head(url,timeout=timeout);r.raise_for_status()
         self.size=int(r.headers['content-length'])
