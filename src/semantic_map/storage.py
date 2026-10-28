@@ -101,14 +101,16 @@ class MemoryStore:
         if self.sightings_cooccur(keep,remove):raise ValueError('Cannot merge co-visible objects')
         k,r=a[keep],a[remove]
         if k.label!=r.label or k.map_version!=r.map_version or k.map_id!=r.map_id:raise ValueError('Incompatible tracks')
-        total=k.hits+r.hits
-        k.center=(k.center*k.hits+r.center*r.hits)/total
+        hits_keep,hits_remove=k.hits,r.hits
+        total=hits_keep+hits_remove
+        k.center=(k.center*hits_keep+r.center*hits_remove)/total
         k.low=np.minimum(k.low,r.low);k.high=np.maximum(k.high,r.high)
         k.hits=total;k.last_seen=max(k.last_seen,r.last_seen)
         k.first_seen=min(k.first_seen,r.first_seen)
         k.state='confirmed' if k.state=='confirmed' or r.state=='confirmed' else 'tentative'
         if k.appearance is not None and r.appearance is not None:
-            z=k.appearance*k.hits+r.appearance*r.hits;k.appearance=z/np.linalg.norm(z)
+            z=k.appearance*hits_keep+r.appearance*hits_remove
+            if np.linalg.norm(z)>1e-9:k.appearance=z/np.linalg.norm(z)
         self.upsert_track(k)
         self.db.execute('UPDATE observations SET object_id=? WHERE object_id=?',(keep,remove))
         self.db.execute('DELETE FROM objects WHERE object_id=?',(remove,))
