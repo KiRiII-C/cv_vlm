@@ -1,0 +1,67 @@
+name: UNSEEN Hypersim ai_017_001 Object Memory V2 physical ID test
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths: [.github/workflows/object-memory-v2-unseen-gt.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: object-memory-v2-unseen-physical-gt
+  cancel-in-progress: true
+jobs:
+  unseen-scene:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 115
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {id: yoloe_legacy, mode: predicted_yolo_masks, engine: legacy}
+          - {id: yoloe_v2, mode: predicted_yolo_masks, engine: v2}
+          - {id: oracle_legacy, mode: oracle_masks, engine: legacy}
+          - {id: oracle_v2, mode: oracle_masks, engine: v2}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install fixed YOLOE26 detector and physical-instance benchmark
+        run: |
+          python -m pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' h5py requests pillow
+      - name: UNSEEN scene selected by GT number only, not model scores
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.hypersim_instance_eval \
+            --scene ai_017_001 --max-objects 130 \
+            --mode ${{ matrix.mode }} --memory-engine ${{ matrix.engine }} \
+            --model yoloe-26s-seg.pt --classes-json config/yoloe26_classes.json \
+            --conf .23 --association fused --out results/${{ matrix.id }} | tee unseen.log
+      - name: Check independent scene has real target GT and measure true IDF1
+        shell: bash
+        env: {EXPERIMENT: "${{ matrix.id }}"}
+        run: |
+          python - <<'PY'
+          import json,os
+          j=json.load(open('results/'+os.environ['EXPERIMENT']+'/hypersim_physical_id_gt.json'))
+          assert j['physical_gt_id_evaluation']=='YES'
+          assert j['scene']=='ai_017_001'
+          assert j['frames_evaluated']>=15
+          assert j['target_gt_unique_physical_ids']>=10
+          assert j['target_vocabulary_gt']['gt_observations']>=35
+          print('UNSEEN_PHYSICAL_ID_GT',j['object_memory_engine'],j['mode'],
+                'IDF1_target',j['target_vocabulary_gt']['IDF1_observation_level'],
+                'IDF1_all',j['IDF1_observation_level'],
+                'false_merges',j['false_merge_predicted_ids'],
+                'false_splits',j['false_split_gt_objects'])
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unseen-ai017-object-memory-${{ matrix.id }}
+          path: |
+            results/${{ matrix.id }}/hypersim_physical_id_gt.json
+            results/${{ matrix.id }}/observation_inputs_and_gt.json.gz
+            unseen.log
+          retention-days: 30
+          if-no-files-found: warn
