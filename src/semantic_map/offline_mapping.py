@@ -96,6 +96,9 @@ class EvidenceGrid:
             nav_ready=True
         selected=[(x,y,val) for (x,y,z),val in self.logodds.items()
                   if floor_z+min_height <= (z+.5)*self.voxel_m <= floor_z+max_height]
+        if not selected and not nav_ready:
+            # Diagnostic projection of observed evidence; no floor was calibrated.
+            selected=[(x,y,val) for (x,y,z),val in self.logodds.items()]
         if not selected:
             raise ValueError("No evidence within chosen navigation height slice")
         xmin=min(x for x,y,v in selected)-2
