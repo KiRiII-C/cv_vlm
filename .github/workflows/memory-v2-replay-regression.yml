@@ -1,0 +1,71 @@
+name: Persistent-memory no-reinference physical GT regression
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/memory-v2-replay-regression.yml
+      - src/semantic_map/object_memory_v2.py
+      - src/semantic_map/memory_v2_replay.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  fixed-input-memory-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install perception-independent memory evaluator
+        run: python -m pip install -e '.[test]'
+      - name: Read immutable YOLOE-26 observations from previous physical-GT experiment
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 40765201552
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: fixed-observation-memory-sweep-*
+          merge-multiple: false
+          path: fixed_inputs
+      - name: Recalculate all eight memory ablations for all four sets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p results/regression
+          find fixed_inputs -name observation_inputs_and_gt.json.gz | sort
+          while IFS= read -r cache; do
+             label="$(basename "$(dirname "$cache")")"
+             python -u -m semantic_map.memory_v2_replay --cache "$cache" \
+               --output "results/regression/${label}.json" | tee "results/regression/${label}.log"
+          done < <(find fixed_inputs -name observation_inputs_and_gt.json.gz | sort)
+      - name: Reject any regression or real-GT false merge on these development sets
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          reports=[]
+          for path in Path('results/regression').glob('*.json'):
+              d=json.loads(path.read_text())
+              a=d['variants']['legacy']
+              b=d['variants']['v2_baseline']
+              l=a['target_gt']['IDF1'];n=b['target_gt']['IDF1']
+              merges=b['all_gt']['false_merge_predicted_uuid']
+              print('MEMORY_V2_DEVELOPMENT_GATE',path.name,'legacy',l,'v2',n,'all_merges',merges)
+              reports.append({'source':path.name,'legacy_target_idf1':l,'v2_target_idf1':n,'all_false_merges':merges})
+              if not (n>=l-1e-10 and merges==0):
+                  raise SystemExit('Physical-ID regression: NOT ACCEPTED')
+          assert len(reports)==4, 'Missing identical-input oracle and real YOLOE repeats'
+          Path('results/regression/summary.json').write_text(json.dumps({
+            'status':'PASS_ON_DEVELOPMENT_SCENES_ONLY',
+            'unseen_scene_generalization':'NOT_TESTED',
+            'same_pretrained_YOLOE_detections_fixed':True,'results':reports},indent=2))
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-v2-gated-physical-gt-fixed-input-regression
+          path: results/regression
+          retention-days: 30
+          if-no-files-found: warn
