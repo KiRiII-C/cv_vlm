@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "persistent-multimodal-semantic-mapping",
-  "updated_on": "2026-10-28",
+  "updated_on": "2026-10-29",
   "gate_policy": "No final acceptance or best-architecture claim while any required stage is not PASS",
   "required_stages": {
     "rgbd_ingestion": {
@@ -27,7 +27,7 @@
     },
     "object_reidentification_gt": {
       "status": "FAIL",
-      "evidence": "ObjectMemoryV2 static 3D risk-aware gallery and review queue implemented. On frozen YOLOE26 detections, development ai_002_001 target IDF1 0.30928 -> 0.32692 and ai_005_001 0.02592 -> 0.04769 (0 false merges), BUT independent unseen ai_017_001 decreased 0.35178 -> 0.34749; on unseen oracle masks decreased 0.95527 -> 0.94236 although false merges fell 1 -> 0. Physical ID robustness NOT ACCEPTED.",
+      "evidence": "ObjectMemoryV2 static 3D risk-aware gallery and review queue implemented. On frozen YOLOE26 detections, development ai_002_001 target IDF1 0.30928 -> 0.32692 and ai_005_001 0.02592 -> 0.04769 (0 false merges), BUT independent unseen ai_017_001 decreased 0.35178 -> 0.34749; on unseen oracle masks decreased 0.95527 -> 0.94236 although false merges fell 1 -> 0. Physical ID robustness NOT ACCEPTED. YOLOE26x factorial Hypersim 20frame scene ai_002_001 IDF1=0.399, ai_005_001=0.192; GT-oracle masks 0.896 and 0.998; classifier/mask/recall breakdown measured, not deployable. CI 40769982699.",
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40766680560",
       "fixed_input_regression": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40766015906",
       "limits": "Hypersim photo-real synthetic, GT world 3D coordinates; 19 RGB-D frames per scene, YOLOE26 mask quality remains dominant bottleneck. Does not evaluate SLAM or on-robot."
@@ -218,6 +218,68 @@
       "mask_observations": 330,
       "confirmed_track_candidates": 22,
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40765935458"
+    },
+    "yoloe26x_four_hypotheses_gt": {
+      "status": "PASS",
+      "meaning": "Controlled experiment successfully executed; detector/3D identity NOT accepted",
+      "model": "yoloe-26x-seg.pt",
+      "prompts": 12,
+      "scene_frames": 20,
+      "gt_xyz_as_input_to_3d_association": true,
+      "estimated_slam": "NOT_TESTED",
+      "scene_ai_002_001": {
+        "GT_target_appearances": 126,
+        "IoU50_recall": 0.380952380952381,
+        "matched_class_accuracy": 0.6410256410256411,
+        "mask_mean_IoU": 0.6510142762214415,
+        "mask_contamination_fraction": 0.24724533285329933,
+        "split_occurrences": 17,
+        "merged_masks_occurrences": 17,
+        "raw_IDF1": 0.398576512455516,
+        "oracle_class_IDF1": 0.4652777777777778,
+        "oracle_mask_IDF1": 0.43902439024390244,
+        "oracle_both_IDF1": 0.4861111111111111,
+        "oracle_recall_IDF1": 0.5521472392638037,
+        "all_GT_IDF1": 0.896
+      },
+      "scene_ai_005_001": {
+        "GT_target_appearances": 1340,
+        "IoU50_recall": 0.06940298507462686,
+        "matched_class_accuracy": 1,
+        "mask_mean_IoU": 0.4996275889589467,
+        "mask_contamination_fraction": 0.44198840265320205,
+        "split_occurrences": 45,
+        "merged_masks_occurrences": 78,
+        "raw_IDF1": 0.19174434087882822,
+        "oracle_class_IDF1": 0.19174434087882822,
+        "oracle_mask_IDF1": 0.24115334207077327,
+        "oracle_both_IDF1": 0.24115334207077327,
+        "oracle_recall_IDF1": 0.9599389545974819,
+        "all_GT_IDF1": 0.9977578475336323
+      },
+      "ci": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40769982699",
+      "conclusion": "Recall dominates crowded lookalike scene. All four mask/detection/class/fragmentation failure modes measured. Oracle interventions cannot be deployed."
+    },
+    "yoloe26x_confidence_tradeoff": {
+      "status": "PASS",
+      "meaning": "Threshold sensitivity measurement only",
+      "model": "yoloe-26x-seg.pt",
+      "confidence_scene_diverse": {
+        "0.1": 0.398576512455516,
+        "0.15": 0.3837638376383764,
+        "0.2": 0.36220472440944884,
+        "0.25": 0.34959349593495936,
+        "0.35": 0.3486238532110092
+      },
+      "confidence_scene_crowded": {
+        "0.1": 0.19174434087882822,
+        "0.15": 0.12264808362369338,
+        "0.2": 0.08279800142755175,
+        "0.25": 0.05652173913043478,
+        "0.35": 0.038039502560351136
+      },
+      "false_merge_tradeoff": "Crowded scene 8 merges at 0.10 confidence; 0 at 0.35, but IDF1 collapses 0.192->0.038. Lower confidence requires stricter memory gates; threshold alone inadequate.",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40770506902"
     }
   }
 }
