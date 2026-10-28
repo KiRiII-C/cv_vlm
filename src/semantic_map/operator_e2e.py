@@ -128,7 +128,10 @@ def run(memory_dir,geom_dir,output_dir,gravity_dir=None):
     }
     (out/"operator_e2e.json").write_text(json.dumps(payload,ensure_ascii=False,indent=2))
     fig,ax=plt.subplots(figsize=(11,8))
-    ax.imshow(values,origin="lower",cmap="gray_r",vmin=-1,vmax=100,
+    from matplotlib.colors import ListedColormap
+    tri=np.where(values==100,2,np.where(values==0,1,0))
+    ax.imshow(tri,origin="lower",cmap=ListedColormap(["#999999","#f8f8f8","#252525"]),
+              vmin=-.5,vmax=2.5,interpolation="nearest",
               extent=[grid.origin[0],grid.origin[0]+values.shape[1]*grid.res,
                       grid.origin[1],grid.origin[1]+values.shape[0]*grid.res])
     for t in tracks:
