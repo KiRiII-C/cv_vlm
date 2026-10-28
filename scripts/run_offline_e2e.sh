@@ -8,7 +8,7 @@ export MKL_NUM_THREADS=3
 export OPENBLAS_NUM_THREADS=2
 DATA="${TUM_DATA:-data/tum}"
 OUTPUT="${OUTPUT_DIR:-results/offline_full}"
-YOLO_MODEL="${YOLO_MODEL:-yolo11n-seg.pt}"
+YOLO_MODEL="${YOLO_MODEL:-yoloe-26s-seg.pt}"
 YOLO_DEVICE="${YOLO_DEVICE:-cpu}"
 mkdir -p "$OUTPUT"/{vo,geometry,gravity,semantic,vlm,operator}
 echo '[1/9] RGB-D ORB+PnP camera pose estimation'
@@ -25,7 +25,7 @@ python -m semantic_map.floor_alignment --geometry "$OUTPUT/geometry" --out "$OUT
 echo '[5/9] Real instance segmentation plus persisted object memory'
 python -m semantic_map.tum_yolo_pipeline --data "$DATA" \
   --output "$OUTPUT/semantic" --model "$YOLO_MODEL" \
-  --device "$YOLO_DEVICE" --max-frames 0 --pose-json "$OUTPUT/vo/optimized_poses.json"
+  --device "$YOLO_DEVICE" --classes-json config/yoloe26_classes.json --conf .23 --max-frames 0 --pose-json "$OUTPUT/vo/optimized_poses.json"
 echo '[6/9] Conservative reconciliation and cross-visit identity audit'
 python -m semantic_map.offline_reconcile --db "$OUTPUT/semantic/semantic_memory.sqlite" \
   --out "$OUTPUT/semantic/reconciliation.json"
