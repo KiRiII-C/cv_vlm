@@ -18,6 +18,7 @@ from .hypersim_range import open_scene,hdf5_array
 from .models import Observation
 from .storage import MemoryStore
 from .engine import SemanticMapper
+from .object_memory_v2 import ObjectMemoryV2
 from .tum_yolo_pipeline import hsv_feature
 from .reid_features import hsv_spatial,AppearanceEncoder
 from .yoloe26_detector import build_detector,class_list
@@ -72,7 +73,8 @@ def evaluate_identity(observations,total_gt):
 def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
         mode='oracle_masks',max_objects=36,model_name='yolo11n-seg.pt',confidence=.25,
         temporal_tracking=False,association_mode='fused',classes_json=None,
-        scene='ai_001_001',feature_mode='hsv_spatial'):
+        scene='ai_001_001',feature_mode='hsv_spatial',memory_engine='legacy',
+        memory_visual_weight=.16,memory_min_score=.65):
     out=Path(out);out.mkdir(exist_ok=True,parents=True)
     from PIL import Image
     remote,z=open_scene(scene)
@@ -82,7 +84,9 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
                  legacy=not Path(model_name).name.startswith('yoloe-26'))
     elif mode!='oracle_masks':raise ValueError('Unknown mode '+mode)
     store=MemoryStore(out/'memory.sqlite')
-    mapper=SemanticMapper(store,min_hits=2,association_mode=association_mode)
+    mapper=(ObjectMemoryV2(store,min_hits=2,visual_weight=memory_visual_weight,min_score=memory_min_score)
+            if memory_engine=='v2' else
+            SemanticMapper(store,min_hits=2,association_mode=association_mode))
     temporal=TemporalTracker(high_thresh=confidence,
         low_thresh=min(.10,confidence*.55)) if temporal_tracking else None
     memory_hint={}
@@ -244,6 +248,9 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
             'estimated_camera_pose':'NOT_TESTED',
             'short_term_temporal_enabled':bool(temporal_tracking),
             'global_association_mode':association_mode,
+            'object_memory_engine':memory_engine,
+            'memory_visual_weight':memory_visual_weight if memory_engine=='v2' else None,
+            'memory_min_score':memory_min_score if memory_engine=='v2' else None,
             'appearance_mode':feature_mode if temporal_tracking else 'hsv',
             'closed_vocabulary_class_list':class_list(classes_json) if mode=='predicted_yolo_masks' else None,
             'frames_evaluated':framecount,'missing_frames':missing,
@@ -269,11 +276,15 @@ def main():
     p.add_argument('--max-objects',type=int,default=36)
     p.add_argument('--feature-mode',choices=['hsv','hsv_spatial','mobilenetv3'],default='hsv_spatial')
     p.add_argument('--temporal',action='store_true')
+    p.add_argument('--memory-engine',choices=['legacy','v2'],default='legacy')
+    p.add_argument('--memory-visual-weight',type=float,default=.16)
+    p.add_argument('--memory-min-score',type=float,default=.65)
     p.add_argument('--association',choices=['fused','multiview','geometry','appearance','adaptive_reid'],default='fused')
     a=p.parse_args()
     run(a.out,mode=a.mode,model_name=a.model,confidence=a.conf,
         classes_json=a.classes_json,temporal_tracking=a.temporal,
         association_mode=a.association,scene=a.scene,max_objects=a.max_objects,
-        feature_mode=a.feature_mode)
+        feature_mode=a.feature_mode,memory_engine=a.memory_engine,
+        memory_visual_weight=a.memory_visual_weight,memory_min_score=a.memory_min_score)
 
 if __name__=='__main__':main()
