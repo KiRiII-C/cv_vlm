@@ -1,0 +1,57 @@
+name: SmolVLM semantic enrichment smoke from real RGBD artifacts
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths: [src/semantic_map/vlm_enrich.py, .github/workflows/vlm-artifact-smoke.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  vlm-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      OMP_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Fetch prior real semantic RGB-D object crop evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 40709956843 --repo "$GITHUB_REPOSITORY" \
+            --name complete-rgbd-offline-e2e-candidate \
+            --dir "$RUNNER_TEMP/e2e"
+          test -f "$RUNNER_TEMP/e2e/results/tum_real/semantic_memory.sqlite"
+          find "$RUNNER_TEMP/e2e/results/tum_real/object_views" -type f | head
+      - name: Install compact CPU VLM
+        run: |
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[rgbd]' 'transformers>=4.55,<6' pillow
+      - name: Describe real observed physical instance candidates, maintain immutable UUID
+        run: |
+          set -o pipefail
+          python -u -m semantic_map.vlm_enrich \
+             --root "$RUNNER_TEMP/e2e/results/tum_real" \
+             --out results/vlm_semantics --max-objects 6 | tee vlm_smoke.log
+      - name: Validate outputs and physical identity nonmutation
+        run: |
+          python - <<'PY'
+          import json
+          a=json.load(open('results/vlm_semantics/vlm_semantics.json'))
+          assert a['objects_described']>=3,a
+          assert a['identity_changes']==0,a
+          assert all(x['vlm_text'] for x in a['descriptions']),a
+          print('VLM_SMOKE_PASS',a['objects_described'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-object-semantic-vlm-candidate
+          path: |
+            results/vlm_semantics/
+            vlm_smoke.log
+          retention-days: 30
+          if-no-files-found: warn
