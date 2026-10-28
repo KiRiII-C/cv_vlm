@@ -162,3 +162,36 @@ multi-scene surface reconstruction GT accuracy, RTAB-Map integration. The
 custom VO is not RTAB-Map. See docs/acceptance_status.md and
 config/acceptance.json; a green technical CI is NOT full project acceptance.
 
+
+
+## Validated labeled 3D evaluation and denser instance map (2026-10-28)
+
+**3D semantic GT (14 actual RGB-D Scenes v2 reconstructed scans):**
+Train on scenes 01–10; evaluate only scenes 11–14 with official per-point
+semantic labels. Point-level foreground mIoU: RGB-only 16.33%,
+geometry-only 13.56%, RGB+geometry 22.96%, multiscale 21.39%.
+See [3D GT benchmark methodology](docs/gt_3d_semantic_benchmark.md)
+and [executed workflow](https://github.com/KiRiII-C/cv_vlm/actions/runs/40752415584).
+
+**Full actual RGB-D input → YOLO masks → 3D instance candidates → GT:**
+For scenes 11 and 14 we downloaded original 3DMatch RGB-D frames and
+calibration and processed 120 frames each. Foreground 3D mIoU of the
+projected semantic map = 18.51% (scene 11) and 40.79% (scene 14).
+The GT supplies semantic categories but not physical instance IDs.
+See [two-scene end-to-end GT workflow](https://github.com/KiRiII-C/cv_vlm/actions/runs/40753853627).
+
+**More dense full TUM map and colored object surfaces:**
+TSDF integration at 640px and voxel size 3cm yields 90,058 triangles
+(up from 20,532). The predicted masked RGB-D points are fused at 1.5cm
+and assigned a persistent color per physical track UUID:
+108,562 color-coded object 3D points across 54 *candidate* track IDs.
+Each detected object appears as a colored set of actual observed 3D
+surface points (not just a marker). 3D Plotly map and PLY are exported.
+See [full dense e2e workflow](https://github.com/KiRiII-C/cv_vlm/actions/runs/40752675350).
+
+**Blocker remains:** Neither the TUM nor the public RGB-D Scenes v2 GT
+provides physically unique object IDs. Therefore real GT IDF1,
+false-split/false-merge and physical re-ID correctness are not established.
+A separate physical-instance-labeled dataset is necessary. Do not
+interpret colored UUIDs or scene-specific category mIoU as proof of
+correct physical object identification.
