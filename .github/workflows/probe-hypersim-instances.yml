@@ -1,0 +1,52 @@
+name: Probe Hypersim real physical instance groundtruth subset
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths: ['.github/workflows/probe-hypersim-instances.yml']
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  official-byte-range:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install -q requests
+      - name: Inspect official Apple Hypersim ZIP remote range and per-pixel 3D instance GT
+        run: |
+          python - <<'PY'
+          import requests,zipfile
+          url='https://docs-assets.developer.apple.com/ml-research/datasets/hypersim/v1/scenes/ai_001_001.zip'
+          s=requests.Session()
+          h=s.head(url,timeout=20)
+          print('HYPERSIM_HEAD',h.status_code,{k:v for k,v in h.headers.items() if k.lower() in ('content-length','accept-ranges','content-type')},flush=True)
+          if h.status_code!=200:raise RuntimeError('Remote Hypersim archive unavailable')
+          h2=s.get(url,headers={'Range':'bytes=0-32'},timeout=30)
+          print('HYPERSIM_RANGE',h2.status_code,len(h2.content),h2.headers.get('Content-Range'),flush=True)
+          if h2.status_code!=206:raise RuntimeError('HTTP Range not supported')
+          class Remote:
+              def __init__(self,url,s,size):self.url=url;self.session=s;self.size=size;self.pos=0
+              def seek(self,offset,whence=0):
+                  if whence==0:self.pos=offset
+                  if whence==1:self.pos+=offset
+                  if whence==2:self.pos=self.size+offset
+                  return self.pos
+              def tell(self):return self.pos
+              def seekable(self):return True
+              def read(self,n=-1):
+                  if n<0:n=self.size-self.pos
+                  if n<=0:return b''
+                  start=self.pos;end=min(self.size-1,self.pos+n-1)
+                  r=self.session.get(self.url,headers={'Range':f'bytes={start}-{end}'},timeout=60)
+                  if r.status_code!=206:raise RuntimeError('Remote data not partial response')
+                  data=r.content
+                  self.pos+=len(data)
+                  return data
+          with zipfile.ZipFile(Remote(url,s,int(h.headers['content-length']))) as z:
+              names=z.namelist()
+              print('HYPERSIM_ZIP_FILES',len(names),flush=True)
+              print('HYPERSIM_INSTANCE_SAMPLES',[x for x in names if 'semantic_instance.hdf5' in x][:8],flush=True)
+              print('HYPERSIM_RGB_SAMPLES',[x for x in names if 'tonemap.jpg' in x][:8],flush=True)
+              print('HYPERSIM_DEPTH_SAMPLES',[x for x in names if 'depth_meters.hdf5' in x][:8],flush=True)
+              print('HYPERSIM_POSITION_SAMPLES',[x for x in names if '.position.hdf5' in x][:8],flush=True)
+          PY
