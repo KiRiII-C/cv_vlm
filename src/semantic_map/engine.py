@@ -103,8 +103,9 @@ class SemanticMapper:
                 if s is not None:
                     # A temporal association can only improve an already
                     # plausible 3D-global match; impossible matches stay gated.
-                    if prior_ids.get(o.detection_id)==t.object_id and s>=.52:
-                        s=min(1.0,s+.055)
+                    if (prior_ids.get(o.detection_id)==t.object_id and s>=.75
+                        and t.hits>=3 and 0<=o.timestamp-t.last_seen<=3):
+                        s=min(1.0,s+.018)
                     scores[i,j]=s
         # Global one-to-one Hungarian: same track can be assigned once per frame.
         if scores.size:
