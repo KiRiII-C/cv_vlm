@@ -27,12 +27,16 @@ jobs:
           set -o pipefail
           OMP_NUM_THREADS=3 python -u -m semantic_map.visual_odometry \
             --data "$RUNNER_TEMP/tum" --output results/vo_mapping --max-frames 0 | tee vo.log
-      - name: Reconstruct TSDF and occupancy using estimated camera trajectory, not GT
+      - name: Verified loop closure pose-graph optimization
+        run: |
+          set -o pipefail
+          OMP_NUM_THREADS=3 python -u -m semantic_map.pose_graph             --poses results/vo_mapping/estimated_poses.json             --vo results/vo_mapping/vo_evaluation.json             --out results/vo_mapping --data "$RUNNER_TEMP/tum" | tee posegraph.log
+      - name: Reconstruct TSDF and occupancy using corrected estimated trajectory, not GT
         run: |
           set -o pipefail
           OMP_NUM_THREADS=3 python -u -m semantic_map.offline_mapping \
             --dataset "$RUNNER_TEMP/tum" --output results/vo_mapping/geometry \
-            --pose-json results/vo_mapping/estimated_poses.json \
+            --pose-json results/vo_mapping/optimized_poses.json \
             --max-frames 0 --tsdf-side 320 --voxel .04 | tee geometry.log
       - name: Machine-readable integrity gate
         run: |
@@ -40,6 +44,11 @@ jobs:
           import json
           a=json.load(open('results/vo_mapping/vo_evaluation.json'))
           g=json.load(open('results/vo_mapping/geometry/mapping_report.json'))
+          p=json.load(open('results/vo_mapping/posegraph_evaluation.json'))
+          assert p['gt_used_in_optimization'] is False
+          assert p['nonlocal_loops_verified']>=1
+          assert p['optimizer_status']=='APPLIED',p
+          assert p['final_optimization_norm'] < p['initial_optimization_norm']+1e-5,p
           assert a['frames']>=500
           assert a['gt_used_in_estimation'] is False
           assert a['estimated_steps']>=int(.7*(a['frames']-1)),a
@@ -54,6 +63,7 @@ jobs:
           path: |
             results/vo_mapping/
             vo.log
+            posegraph.log
             geometry.log
           retention-days: 30
           if-no-files-found: warn
