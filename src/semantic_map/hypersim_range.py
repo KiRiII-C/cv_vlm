@@ -44,6 +44,9 @@ def main():
     import numpy as np
     f,z=open_scene()
     try:
+        print('HYPERSIM_METADATA_FILES',[n for n in z.namelist() if 'metadata_scene' in n or 'metadata_cameras' in n or 'metadata_camera' in n][:15],flush=True)
+        for name in [n for n in z.namelist() if 'metadata_scene.csv' in n or 'metadata_cameras.csv' in n][:2]:
+            print('HYPERSIM_SCENE_METADATA',name,z.read(name)[:1200].decode('utf-8','replace'),flush=True)
         frames=[0,1,2,5,10,20]
         for i in frames:
             prefix=f'ai_001_001/images/scene_cam_00_geometry_hdf5/frame.{i:04d}.'
