@@ -1,0 +1,44 @@
+name: Real TUM RGB-D object-memory mapping (CPU)
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - 'src/semantic_map/tum_yolo_pipeline.py'
+      - 'src/semantic_map/visualize_real.py'
+      - '.github/workflows/real-rgbd-mapping.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  map-sequence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 270
+    env:
+      OMP_NUM_THREADS: '3'
+      MKL_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU PyTorch and computer-vision dependencies
+        run: |
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test]' ultralytics matplotlib plotly
+      - name: Process all synchronized RGB-D frames with actual pretrained segmentation
+        run: |
+          python -u -m semantic_map.tum_yolo_pipeline \
+            --data "$RUNNER_TEMP/tum_rgbd" \
+            --output results/tum_real --model yolo11n-seg.pt \
+            2>&1 | tee tum_real.log
+          python -m semantic_map.visualize_real --root results/tum_real
+      - name: Upload real RGB-D maps, metadata, masks overlay, and track history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tum-rgbd-real-semantic-mapping
+          path: |
+            results/tum_real/
+            tum_real.log
+          retention-days: 30
+          if-no-files-found: warn

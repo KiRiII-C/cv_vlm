@@ -37,3 +37,19 @@ def score(track,obs):
     if delta>.30 and iou<.25:
         return None
     return .75*proximity+.25*iou
+
+
+def score_variant(track,obs,mode="fused"):
+    """Controlled association ablations (no pretrained appearance learning here)."""
+    if mode=="fused":return score(track,obs)
+    if track.map_id!=obs.map_id or track.map_version!=obs.map_version:
+        return None
+    if track.label.strip().lower()!=obs.label.strip().lower():return None
+    delta=float(np.linalg.norm(track.center-obs.center))
+    if mode=="geometry":
+        if delta>0.75:return None
+        return float(np.exp(-.5*(delta/.30)**2))
+    if mode=="appearance":
+        if track.appearance is None or obs.appearance is None or track.appearance.shape!=obs.appearance.shape:return None
+        return float(max(0,track.appearance@obs.appearance))
+    raise ValueError("Unknown association mode "+str(mode))

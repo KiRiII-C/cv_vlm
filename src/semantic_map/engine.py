@@ -6,7 +6,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 from .models import Track
 from .storage import MemoryStore
-from .association import score,overlap_3d
+from .association import score_variant,overlap_3d
 
 
 @dataclass
@@ -18,11 +18,12 @@ class Decision:
 
 
 class SemanticMapper:
-    def __init__(self,store:MemoryStore,min_hits=2,min_score=.68,ambiguity_margin=.10):
+    def __init__(self,store:MemoryStore,min_hits=2,min_score=.68,ambiguity_margin=.10,association_mode="fused"):
         self.store=store
         self.min_hits=min_hits
         self.min_score=min_score
         self.ambiguity_margin=ambiguity_margin
+        self.association_mode=association_mode
 
     @staticmethod
     def update(t,o,min_hits):
@@ -81,7 +82,7 @@ class SemanticMapper:
         scores=np.full((len(candidates),len(tracks)),-1.0)
         for i,(_,o) in enumerate(candidates):
             for j,t in enumerate(tracks):
-                s=score(t,o)
+                s=score_variant(t,o,self.association_mode)
                 if s is not None:scores[i,j]=s
         # Global one-to-one Hungarian: same track can be assigned once per frame.
         if scores.size:
