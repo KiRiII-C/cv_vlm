@@ -130,3 +130,25 @@ def test_scene_graph_and_query(tmp_path):
     assert len(graph['objects'])==2
     assert len(graph['edges'])==1
     mem.store.close()
+
+
+def test_elongated_false_mask_does_not_move_chair_to_neighbor(tmp_path):
+    mem=memory(tmp_path)
+    def obs(frame,c,ident):
+        o=make(frame,c,who=ident,feature=(1,0,0),conf=.90)
+        o.low=np.asarray(c)-np.array([2.,.1,.20])
+        o.high=np.asarray(c)+np.array([.15,3.5,.20])
+        return o
+    uid=mem.process_frame([obs(0,[0,0,1],'first')])[0].object_id
+    other=mem.process_frame([obs(1,[0,1.1,1],'second')])[0]
+    assert other.object_id!=uid
+    assert other.status in ('tentative','deferred','ambiguous')
+    mem.store.close()
+
+
+def test_cup_near_neighbor_not_same_instance(tmp_path):
+    mem=memory(tmp_path)
+    uid=mem.process_frame([make(0,[0,0,1],name='cup',who='a')])[0].object_id
+    candidate=mem.process_frame([make(1,[0,.24,1],name='cup',who='b')])[0]
+    assert candidate.object_id!=uid
+    mem.store.close()
