@@ -1,0 +1,47 @@
+name: RGB-D full-sequence training and 3D map benchmark
+on:
+  push:
+    branches:
+      - experiments/rgbd-cross-attention-20261028
+    paths:
+      - experiments/rgbd_fusion/full_experiment.py
+      - .github/workflows/rgbd-full-map.yml
+  workflow_dispatch:
+jobs:
+  full-rgbd-experiment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: experiments/rgbd_fusion
+    env:
+      EPOCHS: '20'
+      MAP_STRIDE: '3'
+      VOXEL: '0.05'
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU PyTorch and scientific packages
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install numpy scipy opencv-python-headless requests matplotlib
+      - name: Full frame training and held-out RGB-D 3D mapping
+        run: python -u full_experiment.py 2>&1 | tee full_experiment.log
+      - name: Upload learned models, 3D maps, per-frame metrics and visualizations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rgbd-full-training-3d-evaluation
+          path: |
+            experiments/rgbd_fusion/full_results/
+            experiments/rgbd_fusion/full_experiment.log
+          retention-days: 30
+          compression-level: 6
+          if-no-files-found: warn
