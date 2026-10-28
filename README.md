@@ -112,7 +112,7 @@ Now includes the following **separately scoped components**:
 - `python -m semantic_map.benchmark` — identity association ablation on **synthetic** 3D object observations.
 - `python -m semantic_map.benchmark_extensions` — simulated multiview semantic voting and selective VLM call policy.
 - `python -m semantic_map.dashboard` — interactive 3D synthetic object map, 2D occupancy, A* and Russian commands.
-- `python -m semantic_map.tum_yolo_pipeline` — real RGB-D TUM full-sequence pretrained YOLO11n-seg inference; downloads publicly available TUM data and weights (network required).
+- `python -m semantic_map.tum_yolo_pipeline` — default YOLOE-26s-seg with 12 text-prompted categories and 2-stage temporal RGB-D tracker, followed by persistent UUID fusion; first run downloads YOLOE weights and MobileCLIP embeddings.
 - `python -m semantic_map.visualize_real` — real observed surface point cloud and detected object centers visualization.
 
 **Real processing and GT evaluation are different**: TUM Freiburg1 Desk has RGB-D/poses, but no comprehensive physical-object instance ID annotations, so real-world IDF1/mAP cannot be claimed from this data alone.
@@ -195,3 +195,26 @@ false-split/false-merge and physical re-ID correctness are not established.
 A separate physical-instance-labeled dataset is necessary. Do not
 interpret colored UUIDs or scene-specific category mIoU as proof of
 correct physical object identification.
+
+
+## YOLOE-26 migration and tracking (current)
+
+- Default **YOLOE-26s-seg.pt** (official open-vocabulary instance masks),
+  **12 fixed classes** in config/yoloe26_classes.json.
+- TemporalTracker tracks 3D geometry + 2D bbox/mask overlap +
+  masked spatial HSV (optional MobileNetV3 features). ByteTrack-like
+  low-confidence rescue, ambiguity abstention, max 40 missing frames.
+- Persistent global SemanticMapper uses 3D world geometry, SQLite UUIDs,
+  class and pose-version gates, conservative short-term hints, and
+  up to eight distinct multi-view descriptors per object.
+- Run: bash scripts/run_offline_e2e.sh (YOLO_DEVICE=0 to use RTX CUDA).
+- Direct detector smoke: 40 actual TUM frames, 330 segmentation masks,
+  20 confirmed track *candidates*, 15,538 colored 3D points:
+  [GitHub Actions](https://github.com/KiRiII-C/cv_vlm/actions/runs/40759845090).
+- Physical GT evaluation: Hypersim, selected target-only scenes. Initial
+  ai_001_001 contains only one target-class GT physical object; no broad
+  conclusions are valid from that scene. Expanded tests compare ai_002_001
+  (12 target physical IDs) and ai_005_001 (128 crowded chair IDs).
+  Current tracker has NOT met strict physical ID accuracy requirements.
+- Technical methods and evaluated upstream projects:
+  [docs/yoloe26_reid_tracking.md](docs/yoloe26_reid_tracking.md).
