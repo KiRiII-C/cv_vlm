@@ -39,7 +39,9 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          set +u
           . /opt/ros/jazzy/setup.bash
+          set -u
           MAP="$GITHUB_WORKSPACE/actual_map/results/gravity_map/occupancy.yaml"
           test -s "$MAP"
           cat > /tmp/semantic_nav2.yaml <<EOF
@@ -103,7 +105,9 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          set +u
           . /opt/ros/jazzy/setup.bash
+          set -u
           python3 scripts/nav2_planner_smoke.py \
             --operator actual_map/results/operator_e2e/operator_e2e.json \
             --out results/nav2_planner_smoke.json --timeout 35 | tee nav2_result.log
