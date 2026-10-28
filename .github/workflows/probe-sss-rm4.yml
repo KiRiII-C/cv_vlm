@@ -1,0 +1,50 @@
+name: Probe ShanghaiTech SSS rm4 RGBD instance ground truth
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths: [.github/workflows/probe-sss-rm4.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  inspect-author-provided-gt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: python -m pip install -q 'gdown>=5'
+      - name: Download GT object map and pixel segmentation from official SSS rm4 links
+        run: |
+          set -o pipefail
+          mkdir -p probe
+          python - <<'PY'
+          import subprocess, pathlib,zipfile,tarfile
+          root=pathlib.Path('probe')
+          for name,id in [
+              ('object_map','19ZsZaZf5ZAUB_uzV9aV3u66Ct-SoUnhM'),
+              ('segmentation','100iy1BvCF_Vyj9uWn1Z4F81fUJIVZAvR'),
+              ('camera_poses','1iDCXbRAAdyuEIQmQGx0e81AFGJ8tbTL2')]:
+              dest=root/(name+'.download')
+              r=subprocess.run(['gdown','--id',id,'-O',str(dest)],capture_output=True,text=True,timeout=150)
+              print('GT_DOWNLOAD',name,r.returncode,r.stdout[-900:],r.stderr[-900:],flush=True)
+              if r.returncode!=0:continue
+              print('GT_BYTES',name,dest.stat().st_size,flush=True)
+              if zipfile.is_zipfile(dest):
+                  with zipfile.ZipFile(dest) as z:
+                      print('GT_ZIP',name,len(z.namelist()),z.namelist()[:25],flush=True)
+                      for info in z.infolist()[:20]:
+                          if info.filename.lower().endswith(('.txt','.csv')) and info.file_size<40000:
+                              print('GT_TEXT',info.filename,z.read(info)[:1500].decode('utf-8','replace'),flush=True)
+              elif tarfile.is_tarfile(dest):
+                  with tarfile.open(dest) as tar:
+                      print('GT_TAR',name,[m.name for m in tar.getmembers()[:25]],flush=True)
+              elif dest.stat().st_size<40000:
+                  print('GT_TEXT',name,dest.read_bytes()[:2000].decode('utf-8','replace'),flush=True)
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sss-rm4-gt-source-audit
+          path: probe/object_map.download
+          if-no-files-found: warn
