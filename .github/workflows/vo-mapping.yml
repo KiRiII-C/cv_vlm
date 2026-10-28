@@ -38,6 +38,10 @@ jobs:
             --dataset "$RUNNER_TEMP/tum" --output results/vo_mapping/geometry \
             --pose-json results/vo_mapping/optimized_poses.json \
             --max-frames 0 --tsdf-side 320 --voxel .04 | tee geometry.log
+      - name: Estimate gravity/floor and project observed 3D free/occupied evidence
+        run: |
+          set -o pipefail
+          OMP_NUM_THREADS=3 python -u -m semantic_map.floor_alignment             --geometry results/vo_mapping/geometry             --out results/vo_mapping/gravity_map | tee gravity.log
       - name: Machine-readable integrity gate
         run: |
           python - <<'PY'
@@ -49,6 +53,9 @@ jobs:
           assert p['nonlocal_loops_verified']>=1
           assert p['optimizer_status']=='APPLIED',p
           assert p['final_optimization_norm'] < p['initial_optimization_norm']+1e-5,p
+          floor=json.load(open('results/vo_mapping/gravity_map/gravity_report.json'))
+          assert floor['floor_detection']=='PLAUSIBLE_PLANE',floor
+          assert floor['observed_free_cells']>25 and floor['observed_occupied_cells']>25,floor
           assert a['frames']>=500
           assert a['gt_used_in_estimation'] is False
           assert a['estimated_steps']>=int(.7*(a['frames']-1)),a
@@ -65,5 +72,6 @@ jobs:
             vo.log
             posegraph.log
             geometry.log
+            gravity.log
           retention-days: 30
           if-no-files-found: warn
