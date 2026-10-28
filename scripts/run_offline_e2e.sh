@@ -35,7 +35,7 @@ echo '[7/9] Visualize real 3D scene'
 python -m semantic_map.visualize_real --root "$OUTPUT/semantic"
 echo '[8/9] VLM on selected object views'
 python -m semantic_map.vlm_enrich --root "$OUTPUT/semantic" \
-  --out "$OUTPUT/vlm" --max-objects 6
+  --out "$OUTPUT/vlm" --max-objects 40
 echo '[9/9] Offline goal grounding and navigation candidate paths'
 python -m semantic_map.operator_e2e --memory "$OUTPUT/semantic" \
   --geometry "$OUTPUT/geometry" --gravity "$OUTPUT/gravity" --output "$OUTPUT/operator"
