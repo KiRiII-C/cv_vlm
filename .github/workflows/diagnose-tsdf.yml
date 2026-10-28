@@ -1,0 +1,27 @@
+name: Diagnose RGB-D TSDF loss
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths: [.github/workflows/diagnose-tsdf.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          pip install -e '.[test]'
+          pip install 'open3d>=0.18,<0.21'
+      - run: python -u scripts/debug_tsdf.py | tee debug_tsdf.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-tsdf-logs
+          path: debug_tsdf.log
