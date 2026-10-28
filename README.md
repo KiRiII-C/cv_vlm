@@ -1,5 +1,28 @@
 # Semantic Memory Mapping — offline RGB-D (experimental baseline)
 
+## Приёмка (обязательное исправление статуса)
+
+**На 28.10.2026 полная система НЕ принята.**
+Существующая карта из 15 763 вокселей — наблюдаемые поверхности с внешними
+эталонными позами, не RTAB-Map SLAM, не TSDF, не подтверждённая Nav2 occupancy.
+На реальных кадрах обнаружены ошибки/фрагментация объектных треков.
+Снижение unresolved не доказывает стабильность ID.
+Синтетический IDF1=1.0 не является real-world метрикой.
+
+См. [реестр приёмки](docs/acceptance_status.md): нарушения имеют статус FAIL,
+непроверенные компоненты — NOT_TESTED/IMPLEMENTED_UNVALIDATED. Они **не являются
+фиксированным достижением или лучшей архитектурой**.
+
+Новая реализация геометрического слоя: offline_mapping.py, TSDF +
+лучевое свободное/занятое пространство, новый export PLY/PGM/YAML.
+Она подлежит отдельному CI на всей TUM последовательности и использует GT poses.
+**Реконструкция по GT не измеряет ATE/RPE или качество loop closure**. Для
+полного SLAM RTAB-Map и реального Re-ID нужны отдельные проверки.
+
+Команда геометрической реконструкции (Open3D требуется):
+python -m semantic_map.offline_mapping --dataset data/tum --output results/full_geometry
+
+
 **Primary objective:** construct a world-aligned 3D instance map with **persistent IDs** and
 semantic descriptions, without silently duplicating objects when they leave and re-enter
 the camera field of view. The aim is not depth completion.
