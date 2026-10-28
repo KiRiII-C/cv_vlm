@@ -13,6 +13,7 @@ from .geometry import Intrinsics, make_observation
 from .storage import MemoryStore
 from .engine import SemanticMapper
 from .pointmap import SurfaceVoxelMap
+from .instance_cloud import InstanceCloud
 
 K=Intrinsics(517.3,516.5,318.6,255.3,640,480,depth_unit_m=1/5000)
 
@@ -101,6 +102,7 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
     mem=MemoryStore(output/'semantic_memory.sqlite')
     mapping=SemanticMapper(mem,min_hits=2)
     vox=SurfaceVoxelMap(output/'surface_voxels.sqlite',voxel_m=voxel)
+    dense_instances=InstanceCloud(voxel_m=.015,stride=3)
     reports=[];evidence=[];stats={'frames':len(pairs),'detections':0,'invalid_masks':0,'labels':{},'statuses':{}}
     colors={'chair':'#f58518','dining table':'#4c78a8','tv':'#54a24b'}
     for i,(stamp,rgbname,depthname,T) in enumerate(pairs):
@@ -109,7 +111,7 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
         if rgb is None or depth is None or rgb.shape[:2]!=depth.shape:raise ValueError('Invalid TUM frame')
         vox.add_frame(depth,K,T,'tum_freiburg1_desk',str(stamp),stride=8)
         result=det.predict(source=rgb,conf=confidence,retina_masks=True,verbose=False,device=device,imgsz=640)[0]
-        observations=[];view_rects=[];display=rgb.copy()
+        observations=[];view_rects=[];accepted_masks=[];display=rgb.copy()
         if result.masks is not None and result.boxes is not None:
             masks=result.masks.data.cpu().numpy();ids=result.boxes.cls.int().cpu().tolist()
             scores=result.boxes.conf.cpu().tolist()
@@ -131,6 +133,7 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
                 if obs is None:stats['invalid_masks']+=1;continue
                 stats['detections']+=1;stats['labels'][label]=stats['labels'].get(label,0)+1
                 observations.append(obs)
+                accepted_masks.append(mask)
                 yy,xx=np.where(mask)
                 view_rects.append((int(xx.min()),int(yy.min()),int(xx.max()),int(yy.max())))
                 if i%60==0:
@@ -144,6 +147,11 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
                           'timestamp':o.timestamp,'appearance':o.appearance.tolist() if o.appearance is not None else None,
                           'description':o.description,'confidence':o.confidence} for o in observations])
         decisions=mapping.process_frame(observations)
+        if len(decisions)!=len(accepted_masks):
+            raise RuntimeError('Instance observation/mask/association count mismatch')
+        for accepted_mask,decision in zip(accepted_masks,decisions):
+            if decision.object_id and decision.status not in ('ambiguous','unresolved','unassigned_conflict','duplicate_detection'):
+                dense_instances.add(decision.object_id,accepted_mask,depth,K,T)
         if i%30==0:
             viewdir=output/'object_views'
             viewdir.mkdir(exist_ok=True)
@@ -165,6 +173,9 @@ def infer_benchmark(dataset='data/tum',output='results/tum_real',model_name='yol
             cv2.imwrite(str(output/f'overlay_{i:04}.jpg'),display)
         if (i+1)%50==0:print('REAL_PROGRESS',i+1,'/',len(pairs),'tracks',len(mem.tracks()),flush=True)
     tracks=mem.tracks();confirmed=[t for t in tracks if t.state=='confirmed']
+    dense_meta=dense_instances.export(output/'object_instances_colored.ply',
+                track_filter={t.object_id for t in confirmed})
+    stats['dense_colored_instance_map']=dense_meta
     stats.update({'total_tracks':len(tracks),'confirmed_tracks':len(confirmed),
                   'tracks_reobserved_10plus':sum(t.hits>=10 for t in tracks),
                   'identity_gt_available':False,
