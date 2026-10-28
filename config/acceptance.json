@@ -17,8 +17,8 @@
     },
     "tsdf_reconstruction": {
       "status": "IMPLEMENTED_UNVALIDATED",
-      "evidence": "Open3D 0.19 full 596-frame TSDF 11,478 vertices / 20,532 faces using estimated corrected poses; cross-validation: train 298 even frames, test 298 odd frames, 468,722 depth points, median NN 0.03103 m, coverage@10cm 0.983997. Same-scene holdout, NOT independent GT geometry.",
-      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40746269127",
+      "evidence": "Dense 596-frame 3cm TSDF: 49,442 vertices, 90,058 faces and 48,490 surface points, colored 15mm object point map; independent scanned GT surface proximity measured on annotated RGBD-Scenes v2 scene11/14, but scene14/11 used dataset camera poses.",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40752675350",
       "not_yet": "Independent surface accuracy evaluation"
     },
     "occupancy_navigation_ready": {
@@ -26,8 +26,8 @@
       "evidence": "No calibrated floor and Nav2 collision test"
     },
     "object_reidentification_gt": {
-      "status": "FAIL",
-      "evidence": "Fragmented tracks; no physical GT instance IDs"
+      "status": "NOT_TESTED",
+      "evidence": "Real RGB-D Scenes v2 provides per-point semantic class GT, not physical instance IDs; colorized persistent UUID candidates are not independently validated. Cannot report GT IDF1/3D instance AP."
     },
     "loop_closure_object_reprojection": {
       "status": "NOT_TESTED",
@@ -88,6 +88,39 @@
       "quarantined": 12,
       "physical_id_mutations": 0,
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40748057181"
+    },
+    "gt_3d_semantic_14scene_ablation": {
+      "status": "PASS",
+      "data": "RGB-D Scenes v2 point class GT; scenes1–10 train vs11–14 test",
+      "rgb_miou_fg": 0.16329321,
+      "geometry_miou_fg": 0.13562346,
+      "fused_miou_fg": 0.22955496,
+      "multiscale_miou_fg": 0.21393806,
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40752415584",
+      "limits": "Point semantic class only, no physical GT ID"
+    },
+    "actual_rgbd3d_semantic_gt_two_scenes": {
+      "status": "PASS",
+      "data": "Real 3DMatch RGB-D frames with official RGB-D Scenes v2 3D point semantic labels",
+      "frame_count_per_scene": 120,
+      "scene_11_miou_fg": 0.1851416,
+      "scene_14_miou_fg": 0.40786832,
+      "scene_11_geom_8cm": 0.9974223,
+      "scene_14_geom_8cm": 0.9993621,
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40753853627",
+      "limits": "No GT physical instance identities; GT poses in input, no SLAM score"
+    },
+    "dense_3d_tsdf_uuid_colored_pointmap": {
+      "status": "PASS",
+      "frame_count": 596,
+      "tsdf_voxel_m": 0.03,
+      "tsdf_triangles": 90058,
+      "tsdf_cloud_points": 48490,
+      "uuid_colored_point_count": 108562,
+      "uuid_color_voxel_m": 0.015,
+      "confirmed_track_candidates": 54,
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40752675350",
+      "limits": "UUID color distinct; no GT proof of unique physical ID"
     }
   }
 }
