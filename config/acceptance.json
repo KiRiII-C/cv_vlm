@@ -10,13 +10,16 @@
       "evidence": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40700640646"
     },
     "slam_pose_graph": {
-      "status": "NOT_TESTED",
-      "evidence": "No estimated poses or ATE/RPE"
+      "status": "IMPLEMENTED_UNVALIDATED",
+      "evidence": "ORB+depth PnP 596/596; 9 nonlocal loop constraints; sparse SE3 optimization ATE RMSE 0.05498 m, RPE@30 0.04777 m; single TUM fr1_desk sequence only",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40708907904",
+      "not_yet": "Multi-sequence accuracy and physical robot localization"
     },
     "tsdf_reconstruction": {
-      "status": "FAIL",
-      "evidence": "139 mesh vertices/207 triangles from 596 frames; GT poses",
-      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40705730515"
+      "status": "IMPLEMENTED_UNVALIDATED",
+      "evidence": "Pinned Open3D 0.19 fixes 0.20 regression; 596 frames produces 11001/19683 vertices/faces with GT and 26807/48475 with optimized VO; independent 3D surface accuracy not scored",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40708907904",
+      "not_yet": "Independent surface accuracy evaluation"
     },
     "occupancy_navigation_ready": {
       "status": "NOT_TESTED",
