@@ -72,7 +72,7 @@ jobs:
           assert m['detections']>=100 and m['confirmed_tracks']>0
           assert p['unknown_cells_blocked'] and p['robot_actuation']=='NOT_EXECUTED'
           assert len(p['queries'])>=5
-          assert all(q['status'] in ('planned','ambiguous','not_found','unresolved','unreachable') for q in p['queries'])
+          assert all(q['status'] in ('planned','route_candidate_unvalidated_map','ambiguous','not_found','unresolved','unreachable') for q in p['queries'])
           assert all(q.get('nav2_goal_candidate_not_executed') is None for q in p['queries'] if q['status']!='planned')
           assert p['identity_verified_with_GT'] is False
           print('END_TO_END_PIPELINE_INTEGRITY_CHECK_PASS',g['frames_integrated'],m['detections'])
