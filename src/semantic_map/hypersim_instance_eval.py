@@ -93,6 +93,7 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
     # penalize intentionally unrequested GT instances as missed detections.
     target_nyu40={3,4,5,6,7,10,14,25}
     evidence=[];target_evidence=[];target_unique=set();target_gt_total=0
+    gt_predictions_by_frame=defaultdict(list)
     gt_frame_ids=defaultdict(list);first_rgb=None;first_world=None;first_gt=None
     try:
         root=f'{scene}/images/'
@@ -180,6 +181,9 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
                         memory_hint[a.short_id]=d.object_id
             if len(decisions)!=len(physical_ids):raise AssertionError('Observation association mismatch')
             evidence.extend([(uid,d.object_id) for uid,d in zip(physical_ids,decisions)])
+            for uid,decision in zip(physical_ids,decisions):
+                if uid is not None:
+                    gt_predictions_by_frame[int(uid)].append((int(k),decision.object_id))
             if mode=="oracle_masks":
                 # The oracle emits all NYU40 categories, unlike the bounded
                 # 12-class model. Non-target oracle masks are out of scope,
@@ -199,6 +203,26 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
         if not target_gt_total:
             raise RuntimeError("No NYU40 target-vocabulary GT instances in selected frames")
         stats["target_vocabulary_gt"]=evaluate_identity(target_evidence,target_gt_total)
+        # Re-entry statistics count re-observations after a frame gap;
+        # missing GT IDs are reflected in the IDF1 denominator separately.
+        n_reentries=0;n_consistent=0;n_inconsistent=0;n_unresolved=0;switches=0
+        for uid,observed in gt_predictions_by_frame.items():
+            observed.sort(key=lambda item:item[0])
+            for (fa,ua),(fb,ub) in zip(observed[:-1],observed[1:]):
+                if ua is not None and ub is not None and ua!=ub:
+                    switches+=1
+                if fb-fa<4:continue
+                n_reentries+=1
+                if ua is None or ub is None:n_unresolved+=1
+                elif ua==ub:n_consistent+=1
+                else:n_inconsistent+=1
+        stats["observed_reentry_pairs_after_gap_4_frames"]=n_reentries
+        stats["observed_reentry_same_uuid"]=n_consistent
+        stats["observed_reentry_changed_uuid"]=n_inconsistent
+        stats["observed_reentry_unassigned"]=n_unresolved
+        stats["observed_reentry_consistency"]=float(n_consistent/n_reentries) if n_reentries else None
+        stats["observed_gt_to_uuid_switches"]=switches
+        stats["reentry_warning"]="Scores only reobservations with a model detection; unobserved GT frame occurrences remain penalized by IDFN in IDF1."
         stats["target_gt_nyu40_ids"]=sorted(target_nyu40)
         stats["target_gt_unique_physical_ids"]=len(target_unique)
         stats["target_scope_note"]="Target subset = physical IDs whose modal NYU40 class matches our 12 configured prompts; other detections are counted as target false positives, other GT misses are excluded."
