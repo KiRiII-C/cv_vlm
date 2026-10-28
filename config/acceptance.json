@@ -39,8 +39,9 @@
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40713659539"
     },
     "nav2_integration": {
-      "status": "NOT_TESTED",
-      "evidence": "Only simulated A*"
+      "status": "IMPLEMENTED_UNVALIDATED",
+      "evidence": "Actual ROS2 Jazzy nav2_planner ComputePathToPose succeeded (status=4) with 30 poses for object UUID target on reconstructed gravity-aligned TUM occupancy; no robot control/localization and no NavigateToPose.",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40748419765"
     }
   },
   "validated_subsystem_checks": {
@@ -70,6 +71,14 @@
       "source": "yolo11n-seg pretrained; SmolVLM on selected views",
       "scope": "technical integration only; physical ID not validated",
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40713659539"
+    },
+    "nav2_jazzy_global_planner_smoke": {
+      "status": "PASS",
+      "scope": "ComputePathToPose on offline TUM map; synthetic base pose; robot not moved",
+      "status_code": 4,
+      "path_poses": 30,
+      "command": "подъедь к obj_9f79b2cff0075fd7",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40748419765"
     }
   }
 }
