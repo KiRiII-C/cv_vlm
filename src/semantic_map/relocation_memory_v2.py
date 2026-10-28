@@ -78,10 +78,31 @@ class RelocationMemoryV2:
             self.store.db.execute('''INSERT OR IGNORE INTO old_region_vacancy_v2
                 VALUES(?,?,?,?,?,?)''',(map_id,uid,source,str(frame_id),1,json.dumps(proof)))
 
+    def note_rgbd_old_region(self,uid,depth,K,T_map_cam,*,source,frame_id,map_id='default'):
+        """Validate true RGB-D depth rays before registering that an object's old location is free."""
+        from .visibility_evidence_v2 import evaluate_visibility
+        tracks={t.object_id:t for t in self.store.tracks()}
+        if uid not in tracks or tracks[uid].map_id!=map_id:raise KeyError(uid)
+        t=tracks[uid]
+        visibility=evaluate_visibility(depth,K,T_map_cam,t.low,t.high,pose_version=t.map_version)
+        if visibility.proof:
+            self.note_verified_old_region_empty(uid,map_id=map_id,
+                source=source,frame_id=frame_id,proof=visibility.proof)
+        return visibility
+
     def _old_free_views(self,t):
-        return self.store.db.execute('''SELECT COUNT(*) FROM old_region_vacancy_v2
-            WHERE map_id=? AND object_id=? AND independent_ray_validation=1''',
-            (t.map_id,t.object_id)).fetchone()[0]
+        rows=self.store.db.execute('''SELECT evidence FROM old_region_vacancy_v2
+            WHERE map_id=? AND object_id=? AND independent_ray_validation=1
+            ORDER BY source,frame_id''',(t.map_id,t.object_id)).fetchall()
+        # Repeated frames from the SAME camera location are correlated; at
+        # least 15 cm viewpoint baseline is required per independent proof.
+        independent=[]
+        for row in rows:
+            proof=json.loads(row['evidence'])
+            origin=np.asarray(proof['origin_map'],float)
+            if all(np.linalg.norm(origin-prev)>=.15 for prev in independent):
+                independent.append(origin)
+        return len(independent)
 
     def _best_candidate(self,o):
         tracks=[t for t in self.store.tracks()
