@@ -1,0 +1,75 @@
+"""Optional CPU image-language semantic enrichment of stable object hypotheses.
+
+Runs on selected cropped real RGB views, not on every video frame. VLM text is
+unverified evidence and NEVER changes physical object IDs or geometry.
+"""
+from __future__ import annotations
+import argparse,json,time
+from pathlib import Path
+import numpy as np,torch
+from PIL import Image
+from .storage import MemoryStore
+
+def enrich(root,out,max_objects=8,model_name="HuggingFaceTB/SmolVLM-256M-Instruct"):
+    from transformers import AutoProcessor, AutoModelForImageTextToText
+    root=Path(root);out=Path(out);out.mkdir(parents=True,exist_ok=True)
+    db=MemoryStore(root/"semantic_memory.sqlite")
+    tracks=sorted([t for t in db.tracks() if t.state=="confirmed" and t.hits>=10],
+                  key=lambda t:-t.hits)[:max_objects]
+    db.close()
+    selected=[]
+    for t in tracks:
+        pics=sorted((root/"object_views").glob(t.object_id+"_*.jpg"))
+        if pics:selected.append((t,pics[0]))
+    if not selected:
+        raise RuntimeError("No real object view crops: missing perception evidence")
+    torch.set_num_threads(3)
+    print("VLM_LOAD",model_name,"objects",len(selected),flush=True)
+    processor=AutoProcessor.from_pretrained(model_name)
+    model=AutoModelForImageTextToText.from_pretrained(model_name,dtype=torch.float32,
+                                                     attn_implementation="eager").eval().to("cpu")
+    # Small CPU-friendly crop with one visual patch, no interactive cloud API.
+    try:
+        processor.image_processor.size={"longest_edge":512}
+        processor.image_processor.max_image_size=512
+    except Exception:
+        pass
+    descriptions=[]
+    for track,img_path in selected:
+        image=Image.open(img_path).convert("RGB")
+        image.thumbnail((448,448))
+        msg=[{"role":"user","content":[
+            {"type":"image"},
+            {"type":"text","text":
+             "Describe the main physical object in this image in one short factual sentence. "
+             "Give color and visible distinguishing features only when clear. "
+             "If the object is ambiguous or the crop too poor, say uncertain."}]}]
+        prompt=processor.apply_chat_template(msg,add_generation_prompt=True)
+        inputs=processor(text=prompt,images=[image],return_tensors="pt")
+        started=time.time()
+        with torch.inference_mode():
+            ids=model.generate(**inputs,max_new_tokens=48,do_sample=False)
+        cut=int(inputs["input_ids"].shape[-1])
+        response=processor.batch_decode(ids[:,cut:],skip_special_tokens=True)[0].strip()
+        record={"object_id":track.object_id,"detector_label":track.label,
+                "observation_count":track.hits,"image":str(img_path.relative_to(root)),
+                "vlm_text":response,"time_sec":round(time.time()-started,3),
+                "validation_status":"UNVERIFIED_VLM_DESCRIPTION",
+                "identity_was_not_modified":True}
+        descriptions.append(record)
+        print("VLM_OBJECT",json.dumps(record,ensure_ascii=False),flush=True)
+    result={"model":model_name,"objects_considered":len(tracks),
+            "objects_described":len(descriptions),
+            "semantic_accuracy_against_GT":"NOT_EVALUATED",
+            "identity_changes":0,"descriptions":descriptions}
+    (out/"vlm_semantics.json").write_text(json.dumps(result,ensure_ascii=False,indent=2))
+    print("VLM_DONE",len(descriptions),flush=True)
+    return result
+
+if __name__=="__main__":
+    a=argparse.ArgumentParser()
+    a.add_argument("--root",default="results/tum_real")
+    a.add_argument("--out",default="results/vlm_semantics")
+    a.add_argument("--max-objects",type=int,default=8)
+    args=a.parse_args()
+    enrich(args.root,args.out,args.max_objects)
