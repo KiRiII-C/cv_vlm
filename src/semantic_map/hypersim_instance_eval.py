@@ -19,8 +19,11 @@ from .models import Observation
 from .storage import MemoryStore
 from .engine import SemanticMapper
 from .tum_yolo_pipeline import hsv_feature
+from .reid_features import hsv_spatial
+from .yoloe26_detector import build_detector,class_list
+from .temporal_tracker import TemporalTracker,Detection
 
-def instance_observation(world_m,rgb,mask,*,frame,detection,label,confidence,source):
+def instance_observation(world_m,rgb,mask,*,frame,detection,label,confidence,source,feature_mode='hsv'):
     ys,xs=np.where(mask[::4,::4])
     if len(xs)<12:return None
     pts=world_m[::4,::4][ys,xs]
@@ -29,7 +32,7 @@ def instance_observation(world_m,rgb,mask,*,frame,detection,label,confidence,sou
     low=np.quantile(pts,.07,axis=0);high=np.quantile(pts,.93,axis=0)
     high=np.maximum(high,low+.018)
     center=np.median(pts,axis=0)
-    descriptor=hsv_feature(rgb,mask)
+    descriptor=hsv_spatial(rgb,mask) if feature_mode=='hsv_spatial' else hsv_feature(rgb,mask)
     return Observation(source=source,frame_id=str(frame),detection_id=str(detection),
                        label=str(label),center=center,low=low,high=high,
                        timestamp=float(frame),appearance=descriptor,confidence=float(confidence),
@@ -65,17 +68,21 @@ def evaluate_identity(observations,total_gt):
         'warning':'Oracle mode uses GT masks/classes; predicted mode uses pretrained YOLO masks. All modes use GT world positions. Physical ID metrics are computed using GT only in scoring, with missed detections penalized.'}
 
 def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
-        mode='oracle_masks',max_objects=36,model_name='yolo11n-seg.pt',confidence=.25):
+        mode='oracle_masks',max_objects=36,model_name='yolo11n-seg.pt',confidence=.25,
+        temporal_tracking=False,association_mode='fused',classes_json=None):
     out=Path(out);out.mkdir(exist_ok=True,parents=True)
     from PIL import Image
     remote,z=open_scene()
     detector=None
     if mode=='predicted_yolo_masks':
-        from ultralytics import YOLO
-        detector=YOLO(model_name)
+        detector=build_detector(model_name,class_list(classes_json),
+                 legacy=not Path(model_name).name.startswith('yoloe-26'))
     elif mode!='oracle_masks':raise ValueError('Unknown mode '+mode)
     store=MemoryStore(out/'memory.sqlite')
-    mapper=SemanticMapper(store,min_hits=2)
+    mapper=SemanticMapper(store,min_hits=2,association_mode=association_mode)
+    temporal=TemporalTracker(high_thresh=confidence,
+        low_thresh=min(.10,confidence*.55)) if temporal_tracking else None
+    memory_hint={}
     evidence=[];gt_frame_ids=defaultdict(list);first_rgb=None;first_world=None;first_gt=None
     try:
         root='ai_001_001/images/'
@@ -101,7 +108,7 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
             visible=sorted(visible,key=lambda x:-int((gt==x).sum()))[:max_objects]
             gt_frame_ids[k]=visible
             total_gt+=len(visible)
-            observations=[];physical_ids=[]
+            observations=[];physical_ids=[];short_inputs=[]
             if mode=='oracle_masks':
                 for uid in visible:
                     mask=(gt==uid)
@@ -112,7 +119,8 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
                        label=f'gt_semantic_{category}',confidence=1.,source=mode)
                     if o is not None:observations.append(o);physical_ids.append(uid)
             else:
-                result=detector.predict(im,conf=confidence,imgsz=640,device='cpu',retina_masks=True,verbose=False)[0]
+                result=detector.predict(im,conf=min(.10,confidence*.55) if temporal else confidence,
+                                        imgsz=640,device='cpu')
                 if result.masks is not None:
                     masks=result.masks.data.cpu().numpy();classes=result.boxes.cls.int().cpu().tolist()
                     probs=result.boxes.conf.cpu().tolist()
@@ -127,9 +135,30 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
                             if n/max(1,int(mask.sum()))>.55 and int(top) in visible:
                                 uid=int(top)
                         o=instance_observation(world,im,mask,frame=k,detection=f'yolo_{jj}',
-                           label=str(detector.names[c]),confidence=float(prob),source=mode)
-                        if o is not None:observations.append(o);physical_ids.append(uid)
-            decisions=mapper.process_frame(observations)
+                           label=detector.class_name(c),confidence=float(prob),source=mode,
+                           feature_mode='hsv_spatial' if temporal else 'hsv')
+                        if o is not None:
+                            observations.append(o);physical_ids.append(uid)
+                            short_inputs.append(Detection(o.detection_id,o.label,
+                               np.array([np.where(mask)[1].min(),np.where(mask)[0].min(),
+                                         np.where(mask)[1].max()+1,np.where(mask)[0].max()+1],float),
+                               o.center,o.confidence,o.appearance,
+                               cv2.resize(mask.astype('uint8'),(80,60),
+                                          interpolation=cv2.INTER_NEAREST).astype(bool)))
+            hint={}
+            if temporal is not None:
+                assigned=temporal.update(k,short_inputs)
+                keep=[i for i,a in enumerate(assigned) if a.short_id is not None]
+                observations=[observations[i] for i in keep]
+                physical_ids=[physical_ids[i] for i in keep]
+                assigned=[assigned[i] for i in keep]
+                hint={o.detection_id:memory_hint[a.short_id]
+                      for o,a in zip(observations,assigned) if a.short_id in memory_hint}
+            decisions=mapper.process_frame(observations,prior_ids=hint)
+            if temporal is not None:
+                for a,d in zip(assigned,decisions):
+                    if d.object_id and a.short_id not in memory_hint:
+                        memory_hint[a.short_id]=d.object_id
             if len(decisions)!=len(physical_ids):raise AssertionError('Observation association mismatch')
             evidence.extend([(uid,d.object_id) for uid,d in zip(physical_ids,decisions)])
             framecount+=1
@@ -153,6 +182,9 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
             'uses_GT_semantic_classes_for_oracle':mode=='oracle_masks',
             'uses_GT_world_3D_positions_for_both_modes':True,
             'estimated_camera_pose':'NOT_TESTED',
+            'short_term_temporal_enabled':bool(temporal_tracking),
+            'global_association_mode':association_mode,
+            'closed_vocabulary_class_list':class_list(classes_json) if mode=='predicted_yolo_masks' else None,
             'frames_evaluated':framecount,'missing_frames':missing,
             'gt_objects_reappearing_after_sampled_gap':len(return_after_gap),
             'reentering_gt_ids':return_after_gap,
@@ -171,7 +203,12 @@ def main():
     p.add_argument('--mode',choices=['oracle_masks','predicted_yolo_masks'],default='oracle_masks')
     p.add_argument('--model',default='yolo11n-seg.pt')
     p.add_argument('--conf',type=float,default=.25)
+    p.add_argument('--classes-json',default=None)
+    p.add_argument('--temporal',action='store_true')
+    p.add_argument('--association',choices=['fused','multiview','geometry','appearance','adaptive_reid'],default='fused')
     a=p.parse_args()
-    run(a.out,mode=a.mode,model_name=a.model,confidence=a.conf)
+    run(a.out,mode=a.mode,model_name=a.model,confidence=a.conf,
+        classes_json=a.classes_json,temporal_tracking=a.temporal,
+        association_mode=a.association)
 
 if __name__=='__main__':main()
