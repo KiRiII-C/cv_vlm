@@ -1,0 +1,59 @@
+name: RGB-D visual odometry and reconstruction without GT
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - src/semantic_map/visual_odometry.py
+      - .github/workflows/vo-mapping.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  estimate-map:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install -e '.[rgbd]'
+          python -m pip install 'open3d==0.19.0'
+      - name: All-frame independent RGB-D visual odometry, ATE/RPE evaluation
+        run: |
+          set -o pipefail
+          OMP_NUM_THREADS=3 python -u -m semantic_map.visual_odometry \
+            --data "$RUNNER_TEMP/tum" --output results/vo_mapping --max-frames 0 | tee vo.log
+      - name: Reconstruct TSDF and occupancy using estimated camera trajectory, not GT
+        run: |
+          set -o pipefail
+          OMP_NUM_THREADS=3 python -u -m semantic_map.offline_mapping \
+            --dataset "$RUNNER_TEMP/tum" --output results/vo_mapping/geometry \
+            --pose-json results/vo_mapping/estimated_poses.json \
+            --max-frames 0 --tsdf-side 320 --voxel .04 | tee geometry.log
+      - name: Machine-readable integrity gate
+        run: |
+          python - <<'PY'
+          import json
+          a=json.load(open('results/vo_mapping/vo_evaluation.json'))
+          g=json.load(open('results/vo_mapping/geometry/mapping_report.json'))
+          assert a['frames']>=500
+          assert a['gt_used_in_estimation'] is False
+          assert a['estimated_steps']>=int(.7*(a['frames']-1)),a
+          assert g['frames_integrated']==a['frames'],g
+          assert g['mesh_vertices']>=5000 and g['mesh_triangles']>=7500,g
+          print('VO_MAPPING_GEOMETRIC_INTEGRITY_GATE_PASSED; SLAM accuracy separate',a['ATE_RPE_GT_only_for_evaluation'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rgbd-independent-odometry-mapping
+          path: |
+            results/vo_mapping/
+            vo.log
+            geometry.log
+          retention-days: 30
+          if-no-files-found: warn
