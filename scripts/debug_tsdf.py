@@ -37,6 +37,30 @@ def run(upto=1,size=320,scale=5000,extrinsic_mode="inverse"):
   print("EXPERIMENT_BBOX",a.min(axis=0).tolist(),a.max(axis=0).tolist(),flush=True)
  return len(mesh.vertices)
 
+def isolated(variant):
+ T=data[0][3]
+ _,r,d,_=data[0];color=cv2.imread(str(r));depth=cv2.imread(str(d),-1)
+ size=320; h=240
+ image=o3d.geometry.RGBDImage.create_from_color_and_depth(
+  o3d.geometry.Image(np.ascontiguousarray(cv2.cvtColor(cv2.resize(color,(size,h)),cv2.COLOR_BGR2RGB))),
+  o3d.geometry.Image(np.ascontiguousarray(cv2.resize(depth,(size,h),interpolation=cv2.INTER_NEAREST))),
+  depth_scale=5000,depth_trunc=4,convert_rgb_to_intensity=False)
+ raw=np.asarray(image.depth)
+ print("RGBD_INTERNAL_DEPTH",int((raw>.3).sum()),float(raw.max()),flush=True)
+ intrinsic=o3d.camera.PinholeCameraIntrinsic(size,h,K.fx*.5,K.fy*.5,K.cx*.5,K.cy*.5)
+ volume=o3d.pipelines.integration.ScalableTSDFVolume(
+   voxel_length=.04,sdf_trunc=.16,
+   color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
+ extrinsic={"identity":np.eye(4),"inverse":np.linalg.inv(T),"forward":T,
+            "translation_only":np.eye(4)}[variant]
+ if variant=="translation_only":extrinsic[:3,3]=-T[:3,3]
+ cloud=o3d.geometry.PointCloud.create_from_rgbd_image(image,intrinsic)
+ print("ONE_FRAME_CLOUD",variant,len(cloud.points),flush=True)
+ volume.integrate(image,intrinsic,extrinsic)
+ mesh=volume.extract_triangle_mesh()
+ print("ONE_FRAME_TSDF",variant,len(mesh.vertices),len(mesh.triangles),flush=True)
+for variant in ["identity","inverse","forward","translation_only"]:
+ isolated(variant)
 for n in [1,10,100,596]:
  run(n)
 run(100,extrinsic_mode="forward")
