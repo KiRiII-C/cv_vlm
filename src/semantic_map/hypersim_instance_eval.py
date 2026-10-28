@@ -9,7 +9,7 @@ Both modes use GT world XYZ and do NOT assess pose estimation or depth backproje
 No detector is allowed to read physical IDs in its decisions.
 """
 from __future__ import annotations
-import argparse,csv,io,json
+import argparse,csv,io,json,gzip
 from collections import Counter,defaultdict
 from pathlib import Path
 import cv2,numpy as np
@@ -98,6 +98,7 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
     target_nyu40={3,4,5,6,7,10,14,25}
     evidence=[];target_evidence=[];target_unique=set();target_gt_total=0
     gt_predictions_by_frame=defaultdict(list)
+    input_cache=[]
     gt_frame_ids=defaultdict(list);first_rgb=None;first_world=None;first_gt=None
     try:
         root=f'{scene}/images/'
@@ -169,6 +170,19 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
                                o.center,o.confidence,o.appearance,
                                cv2.resize(mask.astype('uint8'),(80,60),
                                           interpolation=cv2.INTER_NEAREST).astype(bool)))
+            # Immutable detector-output snapshot. Physical GT identifiers are
+            # stored ONLY for downstream scoring, never in the association input.
+            input_cache.append({'frame':int(k),'target_visible':sorted(target_visible),
+                'all_gt_visible':list(visible),
+                'physical_gt':list(physical_ids),
+                'observations':[{
+                    'source':o.source,'frame_id':o.frame_id,
+                    'detection_id':o.detection_id,'label':o.label,
+                    'center':o.center.tolist(),'low':o.low.tolist(),'high':o.high.tolist(),
+                    'timestamp':o.timestamp,'confidence':o.confidence,
+                    'appearance':o.appearance.tolist() if o.appearance is not None else None,
+                    'map_id':o.map_id,'map_version':o.map_version
+                } for o in observations]})
             hint={}
             if temporal is not None:
                 assigned=temporal.update(k,short_inputs)
@@ -259,6 +273,13 @@ def run(out,frames=(0,1,2,3,4,5,6,8,10,12,15,18,20,24,28,32,36,40,44,48),
             'physical_gt_id_evaluation':'YES',
             'independent_real_rgbd_semantic_GT':'SYNTHETIC_HYPERSIM_GT_NOT_REAL_SENSOR'})
         (out/'hypersim_physical_id_gt.json').write_text(json.dumps(stats,ensure_ascii=False,indent=2))
+        # The cache deliberately includes held-out GT labels for evaluation,
+        # not for inference. A replaying memory model receives observations only.
+        with gzip.open(out/'observation_inputs_and_gt.json.gz','wt',encoding='utf-8') as f:
+            json.dump({'scene':scene,'mode':mode,'frames':input_cache,
+                       'gt_labels_are_scoring_only':True,
+                       'detector':model_name if mode=='predicted_yolo_masks' else 'oracle',
+                       'note':'Replay observations are fixed; GT physical IDs must never enter matching.'},f)
         # Score only observed GT instance occurrences, not unobserved room objects.
         print('HYPERSIM_PHYSICAL_ID_GT',json.dumps(stats,ensure_ascii=False),flush=True)
         return stats
