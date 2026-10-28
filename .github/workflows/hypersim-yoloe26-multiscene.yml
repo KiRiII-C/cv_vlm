@@ -1,0 +1,95 @@
+name: YOLOE-26 long-horizon ReID on two meaningful Hypersim GT scenes
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths: [.github/workflows/hypersim-yoloe26-multiscene.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: yoloe26-multiscene-physical-gt
+  cancel-in-progress: true
+jobs:
+  multi-scene-instance-gt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scene: ai_002_001
+            id: diverse_baseline
+            mode: predicted_yolo_masks
+            extra: --association fused
+            max_objs: 60
+          - scene: ai_002_001
+            id: diverse_multiview
+            mode: predicted_yolo_masks
+            extra: --temporal --association multiview
+            max_objs: 60
+          - scene: ai_002_001
+            id: diverse_oracle
+            mode: oracle_masks
+            extra: --association multiview
+            max_objs: 60
+          - scene: ai_005_001
+            id: similar_chairs_baseline
+            mode: predicted_yolo_masks
+            extra: --association fused
+            max_objs: 130
+          - scene: ai_005_001
+            id: similar_chairs_multiview
+            mode: predicted_yolo_masks
+            extra: --temporal --association multiview
+            max_objs: 130
+          - scene: ai_005_001
+            id: similar_chairs_oracle
+            mode: oracle_masks
+            extra: --association multiview
+            max_objs: 130
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install actual YOLOE26 and GT physical-label backends
+        run: |
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' h5py requests pillow
+      - name: Measure physical IDF1 across revisits without giving GT identities to model
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.hypersim_instance_eval \
+            --scene ${{ matrix.scene }} --max-objects ${{ matrix.max_objs }} \
+            --mode ${{ matrix.mode }} \
+            --model yoloe-26s-seg.pt --classes-json config/yoloe26_classes.json \
+            --conf .23 ${{ matrix.extra }} --out results/${{ matrix.id }} | tee evaluation.log
+      - name: Fail if target physical-ID annotations are too few to be meaningful
+        run: |
+          python - <<'PY'
+          import json,os
+          p='results/'+os.environ['EVAL_ID']+'/hypersim_physical_id_gt.json'
+          j=json.load(open(p))
+          assert j['physical_gt_id_evaluation']=='YES',j
+          assert j['frames_evaluated']>=15,j
+          assert j['target_gt_unique_physical_ids']>=5,j
+          assert j['target_vocabulary_gt']['gt_observations']>=20,j
+          print('MULTISCENE_ACTUAL_IDF1',j['scene'],j['mode'],
+                'target',j['target_vocabulary_gt']['IDF1_observation_level'],
+                'full',j['IDF1_observation_level'],
+                'false_split',j['false_split_gt_objects'],
+                'false_merge',j['false_merge_predicted_ids'])
+          PY
+        env:
+          EVAL_ID: ${{ matrix.id }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: yoloe26-hypersim-${{ matrix.id }}
+          path: |
+            results/${{ matrix.id }}/
+            evaluation.log
+          retention-days: 30
+          if-no-files-found: warn
