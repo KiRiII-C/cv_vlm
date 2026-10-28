@@ -164,6 +164,9 @@ def predict_scene(scene,out,datadir='data/annotated_rgbd',maxframes=180,
     (out/'rgbd_to_3d_gt_report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
     save_colored_ply(out/f'scene_{scene:02d}_rgbd_voxel_classes.ply',xyz,cls)
     save_colored_ply(out/f'scene_{scene:02d}_gt_nearest_classes.ply',xyz,gt_y[nn])
+    if report['status']=='MEASURED_RGBD_TO_3D_GT_SEMANTICS':
+        from .rgbd_scenes_gt import plot_clouds
+        plot_clouds(out,xyz,cls,gt_y[nn],scene,points=40000)
     tracks=[t for t in memory.tracks() if t.state=='confirmed']
     mapping_points=cloud.export(out/'dense_colored_object_instances.ply',track_filter={t.object_id for t in tracks})
     report['num_confirmed_tracks']=len(tracks)
