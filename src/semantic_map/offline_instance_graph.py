@@ -86,11 +86,13 @@ class OfflineInstanceGraph:
             if feats[i] is not None and feats[j] is not None:
                 if feats[i].shape==feats[j].shape:
                     appearance=float(feats[i]@feats[j])
-            if label[i]!=label[j] and appearance<.40:
-                # Reject only in combination with conflicting appearance;
-                # different detector category alone is NOT a hard gate.
-                continue
             dist=float(np.linalg.norm(xyz[i]-xyz[j]))
+            if label[i]!=label[j] and appearance<.40 and dist>.20:
+                # Class flicker MUST NOT break a geometrically near-identical
+                # observation even if no appearance descriptor is available.
+                # At longer distances, class disagreement plus inconsistent
+                # appearance may veto an otherwise risky merge.
+                continue
             score=(1-self.visual_weight-self.class_weight-self.geometry_weight)*math.exp(-dist/self.cent_scale)
             score+=self.geometry_weight*math.exp(-surface_gap/.23)
             score+=self.visual_weight*max(0.,appearance)
