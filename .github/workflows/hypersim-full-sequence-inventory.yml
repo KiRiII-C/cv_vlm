@@ -1,0 +1,27 @@
+name: Inventory all annotated Hypersim camera frames
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/hypersim-full-sequence-inventory.yml
+      - src/semantic_map/hypersim_full_sequences.py
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: python -m pip install -e '.[test]' requests
+      - run: python -u -m semantic_map.hypersim_full_sequences --scenes ai_002_001 ai_005_001 ai_017_001 | tee inventory.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: complete-hypersim-trajectory-inventory
+          path: |
+            results/hypersim_full_sequences_inventory.json
+            inventory.log
+          retention-days: 30
