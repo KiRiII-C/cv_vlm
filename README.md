@@ -287,3 +287,30 @@ YOLO_DEVICE=0 bash scripts/run_offline_e2e.sh
 соответствие IoU≥0.10, поэтому не эквивалентен строгому MOT IDF1
 на IoU≥0.50. Вне GT-масок физическая стабильность ID остаётся
 НЕ ПРИНЯТА.
+
+
+## Full-frame 3D physical-ID stability validation: 300/300 Hypersim frames
+
+**All continuous 100 frames** from each of ai_002_001, ai_005_001 and
+ai_017_001 have now been run through genuine YOLOE-26x-seg.pt and persistent
+object memory with per-frame 3D physical-ID scoring. Complete streams
+(no missing RGB/semantic instance/class/XYZ frames), all target GT instances
+>=250px, no truncation to 20 samples.
+
+- 170 physical GT target IDs, 6,612 GT appearances, YOLOE 2D mask
+  recall at IoU >=0.50 of 16.71% across the selected scenes.
+- IDF1 pooled over target appearances: **Legacy 21.62%**, **ObjectMemoryV2
+  21.61%**. V2 has more physical false merges (24 vs 19), false splits
+  (43 vs 25), and observed UUID transitions (270 vs 134).
+- In 116 true GT out-of-view re-entries lasting >=5 missed frames, V2
+  retained UUID 8 times, changed it 7 times, and did not assign
+  comparable UUIDs at both endpoints 101 times.
+- With oracle GT instance masks V2 can reach 98.78% IDF1 on crowded
+  chairs, but underperforms Legacy on two other scenes.
+- All world XYZ are **Hypersim GT** to isolate association, NOT estimated
+  SLAM; results do not establish real robot stability.
+
+[Full numerical scientific report](docs/full_sequence_reid_100frames.md) ·
+[Successful 3×100-frame workflow](https://github.com/KiRiII-C/cv_vlm/actions/runs/40820074555).
+
+**Physical stable ID release status: FAIL.**
