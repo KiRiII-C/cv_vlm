@@ -129,7 +129,7 @@ def run(scene,output,*,camera="cam_00",model="yoloe-26x-seg.pt",
     clips=class_list("config/yoloe26_classes.json")
     predictor=build_detector(model,clips)
     remote,z=open_scene(scene)
-    raw_frames=[];oracle_frames=[];frame_rows=[]
+    raw_frames=[];oracle_frames=[];frame_rows=[];oracle_unobservable=[]
     try:
         cameras=discover(z,scene)
         if camera not in cameras:raise ValueError(f"Missing camera {camera}; available {sorted(cameras)}")
@@ -176,7 +176,16 @@ def run(scene,output,*,camera="cam_00",model="yoloe-26x-seg.pt",
                 for i,(uid,label,pixels) in enumerate(targets):
                     o=observation(xyz,rgb,gt==uid,frame,f"oracle_{i}",label,1.,scene)
                     if o is None:
-                        raise RuntimeError(f"Valid GT target {uid} discarded by observation extraction at {frame}")
+                        # A valid GT instance may cover >250 image pixels yet
+                        # have <12 finite 3D positions at stride=4. It is
+                        # genuinely unobservable to this 3D backprojection
+                        # and must count as an identity FALSE NEGATIVE,
+                        # rather than be silently omitted or abort the run.
+                        oracle_unobservable.append({"frame":int(frame),
+                            "physical_GT_ID":int(uid),"class":label,
+                            "visible_pixels":int(pixels),
+                            "reason":"insufficient_valid_sampled_GT_XYZ"})
+                        continue
                     oracle.append(o);oracle_ids.append(int(uid))
             common={"frame":int(frame),"target_visible":[int(t[0]) for t in targets],
                     "all_gt_visible":[int(t[0]) for t in targets]}
@@ -203,6 +212,8 @@ def run(scene,output,*,camera="cam_00",model="yoloe-26x-seg.pt",
        "frame_indices_complete":frames==list(range(frames[0],frames[-1]+1)),
        "missing_modalities":metadata["missing_modalities"],
        "max_object_limit":None,"GT_world_XYZ_used":True,"SLAM":"NOT_TESTED",
+       "oracle_GT_instances_not_3D_observable":oracle_unobservable,
+       "oracle_unobservable_count":len(oracle_unobservable),
        "12_model_prompts":clips,"confidence":conf,
        "observations_raw":sum(len(f["observations"]) for f in raw_frames),
        "physical_target_GT_occurrences":sum(len(f["target_visible"]) for f in raw_frames),
