@@ -1,0 +1,71 @@
+name: ATTRIBUTE real YOLOE26x physical UUID changes over 300 full GT frames
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/hypersim-full-identity-failure-attribution.yml
+      - src/semantic_map/identity_failure_attribution.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: physical-identity-attribution-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  classify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        scene: [ai_002_001, ai_005_001, ai_017_001]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install CPU-only association replay and diagnostic dependencies
+        run: python -m pip install -e '.[test]'
+      - name: Download exact same 100/100-frame YOLOE26x detections and official GT observations
+        uses: actions/download-artifact@v4
+        with:
+          name: full-yoloe26x-100frames-${{ matrix.scene }}
+          run-id: 40820074555
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: original
+      - name: Replay exact masks, inspect SQLite decisions and attribute ID changes by visibility
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.identity_failure_attribution \
+            --scene ${{ matrix.scene }} \
+            --raw original/results/full_sequence_${{ matrix.scene }}/raw_observations_and_GT_scoring.json.gz \
+            --oracle original/results/full_sequence_${{ matrix.scene }}/oracle_observations_and_GT_scoring.json.gz \
+            --out results/${{ matrix.scene }}/physical_identity_failure_attribution.json | tee attribution.log
+      - name: Assert all V2 UUID switches exactly match previously validated 100-frame report
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,glob
+          result=json.load(open(glob.glob('results/*/physical_identity_failure_attribution.json')[0]))
+          prior=json.load(open(glob.glob('original/results/*/full_sequence_report.json')[0]))
+          assert result['scene']==prior['scene']
+          for engine in ['legacy','v2']:
+              diag=result['attribution'][engine]
+              actual=diag['uuid_switch_counts']['uuid_switch_events']
+              expected=prior['results']['raw'][engine]['reidentification']['per_physical_object']['observed_uuid_switch_transitions']
+              assert actual==expected,(engine,actual,expected)
+              assert diag['frames']==100
+              assert diag['short_term_tracker_executed'] is False
+              assert diag['uuid_switch_counts']['created_new_global_uuid']+diag['uuid_switch_counts']['switched_to_existing_global_uuid']==actual
+              print('DIAGNOSTIC_GATE_MATCHES_VALIDATED_REPORT',prior['scene'],engine,actual)
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-100frames-physical-ID-attribution-${{ matrix.scene }}
+          path: |
+            results/${{ matrix.scene }}/physical_identity_failure_attribution.json
+            attribution.log
+          retention-days: 30
+          if-no-files-found: warn
