@@ -1,0 +1,61 @@
+name: Full 100-frame YOLOE26x physical-ID causal error ablation
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/hypersim-100frame-causal-ablation.yml
+      - src/semantic_map/full_sequence_oracle_attribution.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  full-100frame:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        scene: [ai_002_001, ai_005_001, ai_017_001]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install deterministic CPU-only semantic map replay
+        run: python -m pip install -e '.[test]'
+      - name: Fetch exact 100/100 RGB-D model observations and physical GT controls
+        uses: actions/download-artifact@v4
+        with:
+          name: full-yoloe26x-100frames-${{ matrix.scene }}
+          run-id: 40820074555
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Ablate each source error with interventions on entire fixed 100-frame timeline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.full_sequence_oracle_attribution \
+            --raw source/results/full_sequence_${{ matrix.scene }}/raw_observations_and_GT_scoring.json.gz \
+            --oracle source/results/full_sequence_${{ matrix.scene }}/oracle_observations_and_GT_scoring.json.gz \
+            --out results/${{ matrix.scene }}/100frame_causal_errors.json | tee causal.log
+      - name: Confirm exact 100 frames, seven variants and reference-baseline match
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,glob
+          j=json.load(open(glob.glob('results/*/100frame_causal_errors.json')[0]))
+          assert len(j['variants'])==7
+          assert j['detector']=='yoloe-26x-seg.pt'
+          assert j['short_term_temporal_tracker_included'] is False
+          assert j['GT_oracle_3d_used_only_in_named_diagnostic_interventions'] is True
+          print('EXACT_FULL_SEQUENCE_CAUSAL_ABLATION_COMPLETE',j['scene'])
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-100frame-physical-ID-error-causal-${{ matrix.scene }}
+          path: |
+            results/${{ matrix.scene }}/100frame_causal_errors.json
+            causal.log
+          retention-days: 30
+          if-no-files-found: warn
