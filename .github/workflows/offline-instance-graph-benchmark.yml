@@ -1,0 +1,67 @@
+name: Full 300-frame class-soft global 3D instance graph vs original ObjectMemoryV2
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/offline-instance-graph-benchmark.yml
+      - src/semantic_map/offline_instance_graph.py
+      - src/semantic_map/offline_graph_benchmark.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  graph:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        scene: [ai_002_001, ai_005_001, ai_017_001]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[test]'
+      - name: Fetch all original 100-frame real model masks and GT scoring controls
+        uses: actions/download-artifact@v4
+        with:
+          name: full-yoloe26x-100frames-${{ matrix.scene }}
+          run-id: 40820074555
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Compare fresh class-soft graph memory on IDENTICAL real masks and oracle conditions
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.offline_graph_benchmark \
+            --raw source/results/full_sequence_${{ matrix.scene }}/raw_observations_and_GT_scoring.json.gz \
+            --oracle source/results/full_sequence_${{ matrix.scene }}/oracle_observations_and_GT_scoring.json.gz \
+            --out results/${{ matrix.scene }}/class_soft_offline_graph.json \
+            --export-sqlite | tee graph_evaluation.log
+      - name: Assert physical GT only in scoring and persistent SQLite created
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,glob,sqlite3
+          p=glob.glob('results/*/class_soft_offline_graph.json')[0]
+          j=json.load(open(p))
+          assert j['raw']['frames']==j['oracle']['frames']==100
+          assert j['model']=='yoloe-26x-seg.pt'
+          assert j['raw']['GT_as_algorithm_input'] is False
+          assert j['GT_world_XYZ_used'] is True
+          conn=sqlite3.connect(p.replace('.json','.sqlite'))
+          assert conn.execute('SELECT count(*) FROM objects').fetchone()[0]>0
+          conn.close()
+          print('OFFLINE_GRAPH_EVALUATION_COMPLETE_NOT_AUTOMATIC_85_PASS')
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoloe26x-offline-class-soft-3d-memory-${{ matrix.scene }}
+          path: |
+            results/
+            graph_evaluation.log
+          retention-days: 30
+          if-no-files-found: warn
