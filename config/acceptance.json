@@ -30,7 +30,29 @@
       "evidence": "ObjectMemoryV2 static 3D risk-aware gallery and review queue implemented. On frozen YOLOE26 detections, development ai_002_001 target IDF1 0.30928 -> 0.32692 and ai_005_001 0.02592 -> 0.04769 (0 false merges), BUT independent unseen ai_017_001 decreased 0.35178 -> 0.34749; on unseen oracle masks decreased 0.95527 -> 0.94236 although false merges fell 1 -> 0. Physical ID robustness NOT ACCEPTED. YOLOE26x factorial Hypersim 20frame scene ai_002_001 IDF1=0.399, ai_005_001=0.192; GT-oracle masks 0.896 and 0.998; classifier/mask/recall breakdown measured, not deployable. CI 40769982699.",
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40766680560",
       "fixed_input_regression": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40766015906",
-      "limits": "Hypersim photo-real synthetic, GT world 3D coordinates; 19 RGB-D frames per scene, YOLOE26 mask quality remains dominant bottleneck. Does not evaluate SLAM or on-robot."
+      "limits": "Hypersim photo-real synthetic, GT world 3D coordinates; 19 RGB-D frames per scene, YOLOE26 mask quality remains dominant bottleneck. Does not evaluate SLAM or on-robot.",
+      "full_sequences_2026_10_29": {
+        "status": "FAIL",
+        "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40820074555",
+        "actual_frames": 300,
+        "complete_camera_trajectories": 3,
+        "actual_YOLOE26x_detection_model": "yoloe-26x-seg.pt",
+        "GT_physical_unique_objects": 170,
+        "GT_physical_occurrences": 6612,
+        "memory_v2_micro_IDF1": 0.21613249136184917,
+        "legacy_micro_IDF1": 0.21622946800686443,
+        "memory_v2_false_merges": 24,
+        "legacy_false_merges": 19,
+        "memory_v2_false_splits": 43,
+        "legacy_false_splits": 25,
+        "memory_v2_uuid_transition_count": 270,
+        "legacy_uuid_transition_count": 134,
+        "reappearances_GT_absent_at_least_5_frames": 116,
+        "V2_reentry_id_preserved": 8,
+        "V2_reentry_id_changed": 7,
+        "V2_reentry_endpoint_unknown": 101,
+        "warning": "Observational GT evaluation only, GT world XYZ used, no SLAM, not official MOT IDF1. Full 100frames each of 3 selected Hypersim scenes, NOT entire dataset."
+      }
     },
     "loop_closure_object_reprojection": {
       "status": "IMPLEMENTED_UNVALIDATED",
@@ -309,6 +331,54 @@
       "radius035_crowded_false_merges": 6,
       "conclusion": "Narrower radius slightly reduces false mergers but does not yield robust across-scene improvement; DO NOT AUTO APPLY without independent test.",
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40771107918"
+    },
+    "yoloe26x_full_300_frame_gt_reid_assessment": {
+      "status": "PASS",
+      "meaning": "Full sequence experiments completed; physical ReID fails acceptance",
+      "dataset": "Hypersim cam_00 full 100 frames per selected scene ai_002_001, ai_005_001, ai_017_001",
+      "coverage": "300/300 consecutive frames (0..99 per scene) no excluded annotated target instances above 250 pixels",
+      "model": "yoloe-26x-seg.pt",
+      "prompts": 12,
+      "gt_unique_physical_IDs": 170,
+      "total_GT_physical_appearances": 6612,
+      "GT_3D_xyz_as_inference_geometry": true,
+      "estimated_SLAM": "NOT_TESTED",
+      "GT_underobservable_due_depth_sampling": 15,
+      "mask_recall_at_IoU50_micro": 0.16712038717483363,
+      "scene_ai_002_001": {
+        "raw_legacy_IDF1": 0.34500426985482496,
+        "raw_v2_IDF1": 0.39074960127591707,
+        "oracle_legacy_IDF1": 0.9433628318584071,
+        "oracle_v2_IDF1": 0.8502673796791443,
+        "physical_IDs": 12,
+        "GT_occurrences": 583
+      },
+      "scene_ai_005_001": {
+        "raw_legacy_IDF1": 0.038998357963875206,
+        "raw_v2_IDF1": 0.07178664527772208,
+        "oracle_legacy_IDF1": 0.9473233404710921,
+        "oracle_v2_IDF1": 0.9878293999365012,
+        "physical_IDs": 131,
+        "GT_occurrences": 4747
+      },
+      "scene_ai_017_001": {
+        "raw_legacy_IDF1": 0.5531914893617021,
+        "raw_v2_IDF1": 0.44888475836431224,
+        "oracle_legacy_IDF1": 0.9369009584664537,
+        "oracle_v2_IDF1": 0.8951548848292296,
+        "physical_IDs": 27,
+        "GT_occurrences": 1282
+      },
+      "micro_raw_legacy_IDF1": 0.21622946800686443,
+      "micro_raw_V2_IDF1": 0.21613249136184917,
+      "micro_oracle_legacy_IDF1": 0.9449668567905041,
+      "micro_oracle_V2_IDF1": 0.9582091832836733,
+      "raw_legacy_false_merges": 19,
+      "raw_V2_false_merges": 24,
+      "raw_legacy_false_splits": 25,
+      "raw_V2_false_splits": 43,
+      "physical_ID_robustness_acceptance": "FAIL",
+      "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40820074555"
     }
   }
 }
