@@ -77,7 +77,7 @@ def evaluate(scene,output,*,model="yolo26m-sem-ade20k.pt",
           "GT_xyz_for_3D_Geometry":True,"full_memory_IDF1":"NOT_TESTED_BY_THIS_PILOT",
           "results":summary,"per_frame":results}
     p=Path(output);p.parent.mkdir(parents=True,exist_ok=True)
-    p.write_text(json.dumps(report,indent=2,ensure_ascii=False))
+    p.write_text(json.dumps(report,indent=2,ensure_ascii=False,default=lambda x:x.item() if isinstance(x,np.generic) else x.tolist() if isinstance(x,np.ndarray) else str(x)))
     print("SEMANTIC_3D_SPLIT_RESULTS",scene,json.dumps(summary),flush=True)
     return report
 if __name__=="__main__":
