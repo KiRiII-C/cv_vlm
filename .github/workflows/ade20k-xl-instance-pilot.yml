@@ -1,0 +1,60 @@
+name: XL ADE20K dense semantic 3D instance reconstruction pilot
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/ade20k-xl-instance-pilot.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ade20k-xl:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        scene: [ai_005_001, ai_017_001]
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' requests h5py pillow scikit-learn
+      - name: Compare official XL ADE20K dense prediction with depth-clustered instance masks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.semantic_3d_instance_pilot \
+            --scene ${{ matrix.scene }} --max-frames 15 --imgsz 640 \
+            --model yolo26x-sem-ade20k.pt \
+            --out results/${{ matrix.scene }}/xl_3d_instance_pilot.json | tee xl.log
+      - name: Validate no oracle model inputs
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,glob
+          r=json.load(open(glob.glob('results/*/xl_3d_instance_pilot.json')[0]))
+          assert r['frames']==15 and r['semantic_source']=='yolo26x-sem-ade20k.pt'
+          assert r['GT_instance_ID_as_segmentation_input'] is False
+          print('XL_ADE20K_PREDICTION_GT_RECALL_MEASURED',r['results'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ADE20K-XL-dense-3d-${{ matrix.scene }}
+          path: |
+            results/
+            xl.log
+          retention-days: 30
+          if-no-files-found: warn
