@@ -30,7 +30,7 @@ def evaluate(scene,output,*,model="yolo26m-sem-ade20k.pt",
             cls=hdf5_array(z,pre+"semantic.hdf5").astype("int32")
             xyz=hdf5_array(z,pre+"position.hdf5").astype("float32")*scale
             rgb=cv2.imdecode(np.frombuffer(z.read(jpg),"uint8"),cv2.IMREAD_COLOR)
-            got=model_obj.predict(rgb,imgsz=640,device="cpu",verbose=False)[0]
+            got=model_obj.predict(rgb,imgsz=imgsz,device="cpu",verbose=False)[0]
             dense=got.semantic_mask.data.cpu().numpy().astype("int32")
             if dense.shape!=inst.shape:
                 dense=cv2.resize(dense.astype("float32"),(inst.shape[1],inst.shape[0]),
@@ -85,4 +85,6 @@ if __name__=="__main__":
     p.add_argument("--scene",default="ai_005_001")
     p.add_argument("--out",default="results/semantic_3d_instance_pilot.json")
     p.add_argument("--max-frames",type=int,default=15)
-    a=p.parse_args();evaluate(a.scene,a.out,nframes=a.max_frames)
+    p.add_argument("--model",default="yolo26m-sem-ade20k.pt")
+    p.add_argument("--imgsz",type=int,default=640)
+    a=p.parse_args();evaluate(a.scene,a.out,nframes=a.max_frames,model=a.model,imgsz=a.imgsz)
