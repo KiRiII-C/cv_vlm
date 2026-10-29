@@ -1,0 +1,87 @@
+name: FULL 100-frame ADE20K-depth 3D instance IDF1 target 85 percent
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/semantic-3d-full-IDF1.yml
+      - src/semantic_map/semantic_3d_full_sequence.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: full-semantic-3d-physical-id-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  full100:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 125
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scene: ai_002_001
+            eps: '0.12'
+            label: global
+          - scene: ai_005_001
+            eps: '0.12'
+            label: global
+          - scene: ai_017_001
+            eps: '0.12'
+            label: global
+          - scene: ai_005_001
+            eps: '0.10'
+            label: crowded_diagnostic
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install semantic segmentation weights inference and 3D density-splitting backend
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' requests h5py pillow scikit-learn
+      - name: Run all 100 frames on GT-independent ADE20K dense RGB -> 3D instance proposals -> persistent ID
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.semantic_3d_full_sequence \
+            --scene ${{ matrix.scene }} --eps ${{ matrix.eps }} --imgsz 640 \
+            --out results/semantic_3d_${{ matrix.scene }}_${{ matrix.label }} | tee full_idf1.log
+      - name: Validate score provenance, 100 unskipped frames and physical instance-ID result
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,glob
+          r=json.load(open(glob.glob('results/*/semantic_3d_full_GT_report.json')[0]))
+          assert r['frames']==100 and r['full_trajectory'] is True
+          assert r['GT_instance_identity_as_algorithm_input'] is False
+          assert r['model']=='yolo26m-sem-ade20k.pt'
+          assert r['physical_gt_appearances']>=100
+          assert 0<=r['mask_recall50']<=1
+          a=r['results']['offline_graph']['target_gt']
+          b=r['results']['ObjectMemoryV2']['target_gt']
+          assert 0<=a['IDF1']<=1 and 0<=b['IDF1']<=1
+          print('COMPLETE_100_FRAME_DENSE3D_IDF1',r['scene'],
+             'eps',r['clustering_eps_m'],
+             'mask_recall50',r['mask_recall50'],
+             'graph_IDF1',a['IDF1'],'v2_IDF1',b['IDF1'])
+          print('ACCEPTANCE_85_GRAPH',a['IDF1']>=.85)
+          print('ACCEPTANCE_85_V2',b['IDF1']>=.85)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dense-3d-semantic-full-${{ matrix.scene }}-${{ matrix.label }}
+          path: |
+            results/
+            full_idf1.log
+          retention-days: 30
+          if-no-files-found: warn
