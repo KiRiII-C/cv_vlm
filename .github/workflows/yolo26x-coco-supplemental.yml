@@ -1,0 +1,73 @@
+name: Test COCO-trained YOLO26x supplemental class-limited object recall on full GT sequences
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/yolo26x-coco-supplemental.yml
+      - src/semantic_map/yolo26x_coco_rescue.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  restricted-coco-fallback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 125
+    strategy:
+      fail-fast: false
+      matrix:
+        scene: [ai_002_001, ai_005_001, ai_017_001]
+    env:
+      OMP_NUM_THREADS: '3'
+      MKL_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install YOLO26x COCO segmentation fallback and RGBD benchmark
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' requests h5py pillow
+      - name: Download unmodified 100-frame YOLOE-26x 12-text-prompt baseline predictions
+        uses: actions/download-artifact@v4
+        with:
+          name: full-yoloe26x-100frames-${{ matrix.scene }}
+          run-id: 40820074555
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source
+      - name: Run additional COCO-trained YOLO26x on all frames and evaluate fusion in physical-ID memory
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.yolo26x_coco_rescue \
+            --scene ${{ matrix.scene }} \
+            --primary source/results/full_sequence_${{ matrix.scene }}/raw_observations_and_GT_scoring.json.gz \
+            --model yolo26x-seg.pt --conf 0.01 --imgsz 960 \
+            --out results/coco_rescue_${{ matrix.scene }} | tee supplementary_detection.log
+      - name: Check no GT ID as model input and original source retained
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,glob
+          p=glob.glob('results/*/coco_fallback_report.json')[0]
+          r=json.load(open(p))
+          assert r['frames']==100 and r['forbidden_GT_identity_as_model_input']
+          assert r['primary']=='yoloe-26x-seg.pt with fixed 12 text prompts'
+          assert len(r['secondary_COCO_allowlist'])==10
+          print('COCO_SUPPLEMENTAL_PHYSICAL_GT_EXPERIMENT_COMPLETE',r['scene'],r['results'])
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoloe26x-yolo26x-coco-fusion-${{ matrix.scene }}
+          path: |
+            results/
+            supplementary_detection.log
+          retention-days: 30
+          if-no-files-found: warn
