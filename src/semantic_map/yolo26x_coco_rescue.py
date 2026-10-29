@@ -123,7 +123,7 @@ def process(scene,raw_path,output,model="yolo26x-seg.pt",conf=.01,imgsz=960):
           "IoU<0.10 is unmatched and counts against physical IDF1",
           "Additional model requires additional VRAM/time or offline sequential inference"]}
     out=Path(output);out.mkdir(parents=True,exist_ok=True)
-    (out/"coco_fallback_report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2))
+    (out/"coco_fallback_report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2,default=lambda x:x.item() if isinstance(x,np.generic) else x.tolist() if isinstance(x,np.ndarray) else str(x)))
     return report
 
 if __name__=="__main__":
