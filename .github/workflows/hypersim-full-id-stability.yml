@@ -1,0 +1,82 @@
+name: FULL 100-frame Hypersim ID stability YOLOE-26x vs object memory
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/hypersim-full-id-stability.yml
+      - src/semantic_map/hypersim_full_sequence_eval.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: full-physical-id-yoloe26x-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  continuous-frames:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 125
+    strategy:
+      fail-fast: false
+      matrix:
+        scene: [ai_002_001, ai_005_001, ai_017_001]
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install actual YOLOE-26X CPU + Hypersim physical instance-label backends
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' h5py requests pillow
+      - name: Run ALL consecutive GT-labelled frames without downsampling or truncating target physical objects
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.hypersim_full_sequence_eval \
+            --scene ${{ matrix.scene }} \
+            --camera cam_00 \
+            --model yoloe-26x-seg.pt --conf .10 --imgsz 640 \
+            --output results/full_sequence_${{ matrix.scene }} | tee complete_sequence.log
+      - name: Assert exactly 100 of 100 contiguous annotated frames and both V2/legacy engines
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,glob,math
+          report=json.load(open(glob.glob('results/full_sequence_*/full_sequence_report.json')[0]))
+          assert report['model']=='yoloe-26x-seg.pt'
+          assert report['frames_expected']==100 and report['frames_processed']==100
+          assert report['first_frame']==0 and report['last_frame']==99
+          assert report['frame_indices_complete'] and not report['missing_modalities']
+          assert report['max_object_limit'] is None
+          for source in ('raw','oracle'):
+              for engine in ('legacy','v2'):
+                  e=report['results'][source][engine]
+                  assert len(e['per_frame_assignments'])==100
+                  assert 0 <= e['scores']['target_gt']['IDF1'] <= 1
+                  assert len(e['time_windows'])==4
+                  assert e['reidentification']['per_physical_object']['gt_unique_visible']>0
+                  print('FULL_100_FRAME_ID_BENCHMARK',
+                        report['scene'],source,engine,
+                        'IDF1',e['scores']['target_gt']['IDF1'],
+                        'merges',e['scores']['target_gt']['false_merge_predicted_uuid'],
+                        'splits',e['scores']['target_gt']['false_split_physical_gt'],
+                        'switches',e['reidentification']['per_physical_object']['observed_uuid_switch_transitions'])
+          print('FULL_TRAJECTORY_COMPLETED_NOT_PHYSICAL_ID_ACCEPTANCE')
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-yoloe26x-100frames-${{ matrix.scene }}
+          path: |
+            results/full_sequence_${{ matrix.scene }}/
+            complete_sequence.log
+          retention-days: 30
+          if-no-files-found: warn
