@@ -1,0 +1,79 @@
+name: OVI-MAP official upstream CPU smoke (not mapping)
+on:
+  push:
+    branches:
+      - experiments/ovi-map-upstream-20261029
+    paths:
+      - .github/workflows/ovimap-upstream-smoke.yml
+      - docs/ovimap_upstream_baseline.md
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  official-upstream-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout official OVI-MAP at reproducible commit
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git clone --quiet --filter=blob:none https://github.com/OVI-MAP/OVI-MAP.git upstream/OVI-MAP
+          git -C upstream/OVI-MAP checkout --quiet --detach f8f7bcd0ca8228f6b8b4064f2e29dcee3a502424
+          test "$(git -C upstream/OVI-MAP rev-parse HEAD)" = "f8f7bcd0ca8228f6b8b4064f2e29dcee3a502424"
+      - name: Install minimal dependencies for upstream IPC tests
+        run: python -m pip install 'numpy>=1.24,<3'
+      - name: Syntax compile the original OVI-MAP Python scripts
+        run: python -m compileall -q upstream/OVI-MAP/scripts
+      - name: Execute upstream shared-memory and mask-codec smoke tests
+        run: python upstream/OVI-MAP/scripts/ipc_utils.py
+      - name: Parse original mapping CLI with Replica scene arguments
+        shell: bash
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, 'upstream/OVI-MAP/scripts')
+          sys.argv = ['panoptic_mapping_.py','--dataset','replica','--scene_num','office0',
+                      '--data_folder','/data/Datasets/Replica','--result_folder','/data/results/office0',
+                      '--start','0','--end','10','--step','10','--skip_feature_extraction']
+          from options import parse_args
+          args = parse_args()
+          assert args.scene_num == 'office0' and args.end == 10
+          assert args.skip_feature_extraction is True
+          print('UPSTREAM_MAPPING_CLI_PARSE_PASS')
+          PY
+      - name: Record full-pipeline launch prerequisites explicitly
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, glob
+          checks = {
+              'source_commit': 'f8f7bcd0ca8228f6b8b4064f2e29dcee3a502424',
+              'upstream_python_syntax': 'PASS',
+              'upstream_ipc_smoke': 'PASS',
+              'upstream_mapping_cli_parse': 'PASS',
+              'gpu_device_available': os.path.exists('/dev/nvidia0'),
+              'ros_noetic_backend_built': os.path.isfile('upstream/OVI-MAP/mapping_ros_ws/devel/setup.bash'),
+              'replica_input_data_available': bool(glob.glob('/data/Datasets/Replica/office0/results/*')),
+              'cropformer_mask_data_available': bool(glob.glob('/data/sem_seg_temp/office0/cropformer/*.png')),
+          }
+          checks['full_instance_mapping_executed'] = False
+          checks['full_pipeline_status'] = 'BLOCKED_PREREQUISITES'
+          with open('ovimap_readiness.json','w') as f: json.dump(checks,f,indent=2)
+          print(json.dumps(checks,indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## OVI-MAP official upstream smoke\n\n')
+              f.write('Official source syntax, IPC and CLI checks passed. **No 3D map generated.**\n\n')
+              f.write('Full pipeline requires ROS Noetic native backend, Replica/ScanNet input, matching precomputed CropFormer masks and GPU inference.\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ovimap-official-upstream-readiness
+          path: ovimap_readiness.json
+          if-no-files-found: warn
+          retention-days: 30
