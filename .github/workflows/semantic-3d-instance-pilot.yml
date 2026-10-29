@@ -1,0 +1,62 @@
+name: ADE20K dense RGBD semantic to 3D physical instance clustering pilot
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/semantic-3d-instance-pilot.yml
+      - src/semantic_map/semantic_3d_instance_pilot.py
+      - src/semantic_map/semantic_3d_instance_proposals.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  density-splitting:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        scene: [ai_005_001, ai_017_001]
+    env:
+      OMP_NUM_THREADS: '3'
+      MKL_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' requests h5py pillow scikit-learn
+      - name: Actual pretrained ADE20K class maps + three 3D instance-separation eps hypotheses
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.semantic_3d_instance_pilot \
+            --scene ${{ matrix.scene }} --max-frames 15 \
+            --out results/${{ matrix.scene }}/3d_instance_gt_pilot.json | tee 3d_split.log
+      - name: Verify segmentation is ground-truth-independent and actual real model
+        shell: bash
+        run: |
+          python - <<'PY'
+          import glob,json
+          r=json.load(open(glob.glob('results/*/3d_instance_gt_pilot.json')[0]))
+          assert r['frames']==15 and not r['GT_instance_ID_as_segmentation_input']
+          assert r['semantic_source']=='yolo26m-sem-ade20k.pt'
+          assert len(r['results'])==3
+          print('GT_EVALUATED_3D_INSTANCE_SPLIT_COMPLETE')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ADE20K-3d-instance-GT-${{ matrix.scene }}
+          path: |
+            results/
+            3d_split.log
+          retention-days: 30
+          if-no-files-found: warn
