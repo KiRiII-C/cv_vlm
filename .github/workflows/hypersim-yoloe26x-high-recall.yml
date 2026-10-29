@@ -1,0 +1,86 @@
+name: YOLOE26x high recall multi-resolution full Hypersim 100-frame
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/hypersim-yoloe26x-high-recall.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: yoloe26x-high-recall-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  resolution:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scene: ai_002_001
+            imgsz: 960
+            conf: "0.01"
+          - scene: ai_005_001
+            imgsz: 960
+            conf: "0.01"
+          - scene: ai_017_001
+            imgsz: 960
+            conf: "0.01"
+          - scene: ai_005_001
+            imgsz: 1280
+            conf: "0.01"
+          - scene: ai_017_001
+            imgsz: 1280
+            conf: "0.01"
+    env:
+      OMP_NUM_THREADS: '3'
+      MKL_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install official YOLOE26x CPU + physical GT benchmark
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' requests h5py pillow
+      - name: Exhaustively detect 100/100 frames with high-resolution low-confidence YOLOE26x
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.hypersim_full_sequence_eval \
+             --scene ${{ matrix.scene }} --camera cam_00 \
+             --model yoloe-26x-seg.pt \
+             --conf ${{ matrix.conf }} --imgsz ${{ matrix.imgsz }} \
+             --skip-oracle \
+             --output results/full_${{ matrix.scene }}_${{ matrix.imgsz }} | tee model.log
+      - name: Check complete physical-ID sequence and output benchmark
+        shell: bash
+        run: |
+          python - <<'PY'
+          import glob,json
+          r=json.load(open(glob.glob('results/full_*/full_sequence_report.json')[0]))
+          assert r['model']=='yoloe-26x-seg.pt'
+          assert r['frames_processed']==100 and r['frames_expected']==100
+          assert r['frame_indices_complete']
+          print('HIGH_RECALL_100_FRAME_RESULTS',
+                r['scene'],r['image_size'] if 'image_size' in r else 'matrix-size',
+                'gt_instances',r['physical_GT_unique_target_IDs'],
+                'gt_appearances',r['physical_target_GT_occurrences'],
+                'masks',r['observations_raw'],'mask_recall_50',r['mask_recall_50'],
+                'v2_idf1',r['results']['raw']['v2']['scores']['target_gt']['IDF1'])
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoloe26x-high-recall-${{ matrix.scene }}-${{ matrix.imgsz }}
+          path: |
+            results/
+            model.log
+          retention-days: 30
+          if-no-files-found: warn
