@@ -95,8 +95,8 @@ def run(scene,out,*,eps=.12,imgsz=640,min_area=220,include_v2=True):
     finally:z.close();remote.close()
     cache=dict(scene=scene,detector=model,mode="predicted_yolo_masks",
        frames=frames,gt_labels_are_scoring_only=True,used_GT_world_XYZ=True,
-       meta=dict(3d_cluster_eps_m=eps,semantic_imgsz=imgsz,
-                 class_agnostic_3d_instance_splitting=True))
+       meta={"cluster_eps_m":eps,"semantic_imgsz":imgsz,
+                 "class_agnostic_3d_instance_splitting":True})
     with gzip.open(root/"semantic_3d_observations_and_GT_scoring.json.gz","wt",encoding="utf8") as f:
         json.dump(cache,f)
     # Offline map: class-soft global instance graph. No physical IDs provided
