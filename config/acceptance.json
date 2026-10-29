@@ -52,7 +52,13 @@
         "V2_reentry_id_changed": 7,
         "V2_reentry_endpoint_unknown": 101,
         "warning": "Observational GT evaluation only, GT world XYZ used, no SLAM, not official MOT IDF1. Full 100frames each of 3 selected Hypersim scenes, NOT entire dataset."
-      }
+      },
+      "full_300_frame_root_cause": "6,612 target GT object occurrences, only 1,553 with YOLOE26x IoU>=0.10 matched masks. In V2 270 GT-object UUID transitions: 122 consecutive visible, 53 visible detector missed, 29 visible but intermediate NULL UUID, 66 true FOV re-entry. 76 transitions create genuinely new SQLite UUID; 194 select preexisting UUID. Pre-frame gate: 125 class flip, 127 static class-specific 3D radius, 18 other. Full 7-condition counterfactual IDF1: raw pooled 0.21613, oracle class 0.24166, oracle GT mask 3D geometry 0.29465, GT add missed 0.85281, GT-only 0.95821. Stable physical IDs FAIL. Short TemporalTracker not used in these Hypersim evaluations.",
+      "root_cause_runs": [
+        "https://github.com/KiRiII-C/cv_vlm/actions/runs/40820074555",
+        "https://github.com/KiRiII-C/cv_vlm/actions/runs/40822126640",
+        "https://github.com/KiRiII-C/cv_vlm/actions/runs/40822432945"
+      ]
     },
     "loop_closure_object_reprojection": {
       "status": "IMPLEMENTED_UNVALIDATED",
@@ -379,6 +385,42 @@
       "raw_V2_false_splits": 43,
       "physical_ID_robustness_acceptance": "FAIL",
       "run": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40820074555"
+    },
+    "full_hypersim_300_frame_identity_attribution": {
+      "status": "PASS",
+      "meaning": "Actual replay/scores reproducible, persistent object-ID reliability remains FAIL",
+      "scenes": [
+        "ai_002_001",
+        "ai_005_001",
+        "ai_017_001"
+      ],
+      "frames": 300,
+      "gt_physical_target_occurrences": 6612,
+      "matched_model_observations_iou_ge_010": 1553,
+      "missing_model_observations": 5059,
+      "v2_uuid_switches": 270,
+      "v2_switches_while_gt_visible": 204,
+      "v2_switches_after_true_FOV_absence": 66,
+      "v2_switches_created_new_sqlite_uuid": 76,
+      "v2_switches_to_preexisting_uuid": 194,
+      "v2_prior_uuid_hard_gate_class_change": 125,
+      "v2_prior_uuid_hard_gate_class_radius": 127,
+      "v2_prior_uuid_other": 18,
+      "replay_without_short_temporal_tracker": true,
+      "evaluation_limitation": "Model predicted RGB masks and Hypersim GT world XYZ; GT physical ID only for attribution, not tracker. 2D IoU >=0.10 score matching. Not official HOTA or robot-SLAM benchmark.",
+      "source": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40822126640"
+    },
+    "full_hypersim_300_frame_perception_oracle_ablation": {
+      "status": "PASS",
+      "meaning": "Seven diagnostic interventions evaluated; oracle not deployable",
+      "pooled_raw_v2_IDF1": 0.21613,
+      "pooled_correct_class_IDF1": 0.24166,
+      "pooled_correct_3d_mask_features_IDF1": 0.29465,
+      "pooled_correct_both_IDF1": 0.31009,
+      "pooled_add_missing_GT_IDF1": 0.85281,
+      "pooled_all_GT_IDF1": 0.95821,
+      "main_bottleneck": "Object detection and mask-association recall; next 3D geometry from mask, then classifier class flip, in this data mix.",
+      "source": "https://github.com/KiRiII-C/cv_vlm/actions/runs/40822432945"
     }
   }
 }
