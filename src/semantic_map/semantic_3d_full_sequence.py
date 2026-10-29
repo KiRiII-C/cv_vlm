@@ -120,7 +120,7 @@ def run(scene,out,*,eps=.12,imgsz=640,min_area=220,include_v2=True):
        physical_gt_appearances=total_gt,
        physical_unique_GT_IDs=len({k for f in frames for k in f["target_visible"]}),
        predicted_3d_instance_observations=sum(len(f["observations"]) for f in frames),
-       3d_not_observable_proposals=missing_3d,
+       unavailable_3d_proposals=missing_3d,
        mask_recall25=sum(x["IoU25_tp"] for x in rows)/max(1,total_gt),
        mask_recall50=sum(x["IoU50_tp"] for x in rows)/max(1,total_gt),
        mask_recall75=sum(x["IoU75_tp"] for x in rows)/max(1,total_gt),
