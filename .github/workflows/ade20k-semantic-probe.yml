@@ -1,0 +1,62 @@
+name: Probe dense ADE20K semantic class recall before 3D object instance graph
+on:
+  push:
+    branches: [feature/semantic-memory-mapping]
+    paths:
+      - .github/workflows/ade20k-semantic-probe.yml
+      - src/semantic_map/ade20k_semantic_pilot.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dense-class-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        scene: [ai_005_001, ai_017_001]
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' requests h5py pillow
+      - name: Measure independent ADE20K semantic chair evidence in 30 consecutive RGBD frames
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -u -m semantic_map.ade20k_semantic_pilot \
+            --scene ${{ matrix.scene }} --max-frames 30 \
+            --model yolo26m-sem-ade20k.pt --imgsz 640 \
+            --out results/${{ matrix.scene }}/ade20k_class_recall.json | tee probe.log
+      - name: Assert genuine semantic model and class GT only for scoring
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,glob
+          r=json.load(open(glob.glob('results/*/ade20k_class_recall.json')[0]))
+          assert r['frames']==30 and r['source']=='yolo26m-sem-ade20k.pt'
+          assert r['GT_as_model_input'] is False
+          assert 'chair' in list(r['names'].values())
+          print('DENSE_CLASS_RECALL_PILOT_COMPLETE')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ADE20K-chair-semantic-recall-${{ matrix.scene }}
+          path: |
+            results/
+            probe.log
+          retention-days: 30
+          if-no-files-found: warn
