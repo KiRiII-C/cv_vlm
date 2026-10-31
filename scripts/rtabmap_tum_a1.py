@@ -77,13 +77,18 @@ def replay(args, pairs):
                          "quaternion_xyzw":[q.x,q.y,q.z,q.w]})
 
     sub=node.create_subscription(Odometry,"/odom",on_odometry,50)
-    for _ in range(50):
+    # BOTH odometry and mapping subscribe independently to each camera topic.
+    # The first A1 attempt started with only one subscriber per topic, before
+    # the full pipeline had completed ROS discovery.
+    for _ in range(300):
         rclpy.spin_once(node,timeout_sec=0.1)
-        if pub_rgb.get_subscription_count() and pub_depth.get_subscription_count() and pub_info.get_subscription_count():
+        if (pub_rgb.get_subscription_count() >= 2
+                and pub_depth.get_subscription_count() >= 2
+                and pub_info.get_subscription_count() >= 2):
             break
     counts={name:pub.get_subscription_count() for name,pub in
             [("rgb",pub_rgb),("depth",pub_depth),("camera_info",pub_info)]}
-    if min(counts.values()) < 1:
+    if min(counts.values()) < 2:
         node.destroy_node()
         rclpy.shutdown()
         raise RuntimeError(f"RTAB-Map subscribers did not become ready: {counts}")
@@ -129,7 +134,8 @@ def replay(args, pairs):
             rclpy.spin_once(node,timeout_sec=0.02)
         if (idx+1)%25==0:
             print(f"REAL_TUM_PUBLISHED={idx+1} ODOM_RECEIVED={len(odom_log)}",flush=True)
-    for _ in range(100):
+    # Wait for the RTAB-Map callback queue to drain before final evaluation.
+    for _ in range(200):
         rclpy.spin_once(node,timeout_sec=0.10)
     elapsed=time.monotonic()-started
     metrics=evaluate_poses(odom_log,pairs)
@@ -160,6 +166,10 @@ def replay(args, pairs):
         raise RuntimeError(f"Insufficient REAL odometry messages: {len(odom_log)}; matched {metrics.get('matched_gt_frames',0)}")
     if not math.isfinite(metrics["ATE_RMSE_m"]):
         raise RuntimeError("ATE is not finite")
+    translations=np.asarray([o["translation_xyz"] for o in odom_log])
+    spread=np.linalg.norm(translations.max(axis=0)-translations.min(axis=0))
+    if spread < 0.02:
+        raise RuntimeError(f"Odometry did not show real camera movement: spread={spread:.5f}m")
 
 def main():
     p=argparse.ArgumentParser()
