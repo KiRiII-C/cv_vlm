@@ -40,8 +40,9 @@ jobs:
             --volume "$PWD:/workspace" \
             --workdir /workspace \
             cv-vlm:jazzy-a0 bash -lc '
-              set -euo pipefail
+              set -eo pipefail
               source /opt/ros/jazzy/setup.bash
+              set -u
               ros2 pkg prefix rtabmap_slam
               ros2 pkg prefix rtabmap_util
               ros2 pkg executables rtabmap_slam
