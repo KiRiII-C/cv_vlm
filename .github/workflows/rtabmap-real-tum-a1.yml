@@ -1,0 +1,136 @@
+name: A1 Real TUM RGB-D RTAB-Map ROS 2 SLAM
+
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - scripts/rtabmap_tum_a1.py
+      - .github/workflows/rtabmap-real-tum-a1.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-tum-rtabmap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout experiment
+        uses: actions/checkout@v4
+
+      - name: Build reproducible ROS 2 Jazzy + RTAB-Map Docker image
+        run: |
+          set -euo pipefail
+          docker build --progress=plain -t cv-vlm:jazzy-a1 . > docker_a1_build.log 2>&1 || {
+            tail -100 docker_a1_build.log
+            exit 1
+          }
+          tail -10 docker_a1_build.log
+
+      - name: Run real registered RGB-D on RTAB-Map visual odometry and SLAM
+        env:
+          ROS_DOMAIN_ID: '61'
+        run: |
+          set -euo pipefail
+          mkdir -p results/a1
+          docker run --rm \
+            -e ROS_DOMAIN_ID="$ROS_DOMAIN_ID" \
+            -v "$PWD:/workspace" -w /workspace \
+            cv-vlm:jazzy-a1 bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              set -u
+              export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+              export ROS_LOCALHOST_ONLY=1
+              export OMP_NUM_THREADS=2
+              export OPENBLAS_NUM_THREADS=2
+              export PYTHONUNBUFFERED=1
+              ros2 pkg prefix rtabmap_odom
+              ros2 pkg prefix rtabmap_slam
+              python3 scripts/rtabmap_tum_a1.py --download-only --frames 180 --every 3 --data data/tum
+              ros2 run rtabmap_odom rgbd_odometry --ros-args \
+                -p frame_id:=camera_color_optical_frame \
+                -p approx_sync:=true \
+                -p subscribe_rgbd:=false \
+                -p publish_tf:=false \
+                -r rgb/image:=/camera/rgb/image \
+                -r depth/image:=/camera/depth/image \
+                -r rgb/camera_info:=/camera/rgb/camera_info \
+                -r odom:=/odom > results/a1/rtabmap_odom.log 2>&1 &
+              ODOM_PID=$!
+              ros2 run rtabmap_slam rtabmap --ros-args \
+                -p frame_id:=camera_color_optical_frame \
+                -p approx_sync:=true \
+                -p subscribe_depth:=true \
+                -p subscribe_rgbd:=false \
+                -p subscribe_rgb:=false \
+                -p subscribe_odom_info:=false \
+                -p publish_tf:=false \
+                -p database_path:=/workspace/results/a1/rtabmap.db \
+                -r rgb/image:=/camera/rgb/image \
+                -r depth/image:=/camera/depth/image \
+                -r rgb/camera_info:=/camera/rgb/camera_info \
+                -r odom:=/odom > results/a1/rtabmap_slam.log 2>&1 &
+              SLAM_PID=$!
+              cleanup() {
+                kill -INT "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+                sleep 3
+                kill -TERM "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+                wait "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+              }
+              trap cleanup EXIT
+              sleep 8
+              python3 -u scripts/rtabmap_tum_a1.py \
+                --frames 180 --every 3 --rate 5 --min-odom 20 \
+                --data data/tum --output results/a1/rtabmap_real_tum.json \
+                > results/a1/replay.log 2>&1 || {
+                  tail -100 results/a1/replay.log
+                  tail -100 results/a1/rtabmap_odom.log
+                  tail -100 results/a1/rtabmap_slam.log
+                  exit 1
+                }
+              tail -30 results/a1/replay.log
+              sleep 4
+            ' 2>&1 | tee results/a1/container.log
+
+      - name: Validate recorded odometry and actual RTAB-Map database
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, sqlite3, math
+          root=Path("results/a1")
+          p=root/"rtabmap_real_tum.json"
+          d=json.loads(p.read_text())
+          assert d["input"]=="real_TUM_freiburg1_desk_RGBD"
+          assert d["GT_used_as_input"] is False
+          assert d["pose_estimator"]=="rtabmap_odom/rgbd_odometry"
+          assert d["published_frames"]>=100
+          assert d["odometry_messages"]>=20, d
+          assert d["matched_gt_frames"]>=20, d
+          assert math.isfinite(d["ATE_RMSE_m"]),d
+          db=root/"rtabmap.db"
+          assert db.is_file() and db.stat().st_size>4096, "No persisted RTAB-Map database"
+          c=sqlite3.connect(db)
+          tables=[row[0] for row in c.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+          assert "Node" in tables, tables
+          nodes=c.execute("SELECT COUNT(*) FROM Node").fetchone()[0]
+          assert nodes>=2, f"No RTAB-Map graph nodes: {nodes}"
+          d["rtabmap_database_nodes"]=nodes
+          d["rtabmap_database_bytes"]=db.stat().st_size
+          p.write_text(json.dumps(d,indent=2)+"\n")
+          print("A1_REAL_TUM_RTABMAP_VALIDATED", {k:d[k] for k in ("published_frames","odometry_messages","matched_gt_frames","ATE_RMSE_m","rtabmap_database_nodes")})
+          PY
+
+      - name: Export real experimental evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a1-tum-rtabmap-evidence
+          path: |
+            results/a1/
+            docker_a1_build.log
+          if-no-files-found: warn
+          retention-days: 30
