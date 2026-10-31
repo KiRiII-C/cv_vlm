@@ -54,7 +54,7 @@ jobs:
                 -p frame_id:=camera_color_optical_frame \
                 -p approx_sync:=false \
                 -p subscribe_rgbd:=false \
-                -p publish_tf:=false \
+                -p publish_tf:=true \
                 -r rgb/image:=/camera/rgb/image \
                 -r depth/image:=/camera/depth/image \
                 -r rgb/camera_info:=/camera/rgb/camera_info \
