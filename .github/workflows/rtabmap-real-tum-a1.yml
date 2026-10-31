@@ -49,10 +49,10 @@ jobs:
               export PYTHONUNBUFFERED=1
               ros2 pkg prefix rtabmap_odom
               ros2 pkg prefix rtabmap_slam
-              python3 scripts/rtabmap_tum_a1.py --download-only --frames 180 --every 3 --data data/tum
+              python3 scripts/rtabmap_tum_a1.py --download-only --frames 150 --every 3 --data data/tum
               ros2 run rtabmap_odom rgbd_odometry --ros-args \
                 -p frame_id:=camera_color_optical_frame \
-                -p approx_sync:=true \
+                -p approx_sync:=false \
                 -p subscribe_rgbd:=false \
                 -p publish_tf:=false \
                 -r rgb/image:=/camera/rgb/image \
@@ -62,7 +62,7 @@ jobs:
               ODOM_PID=$!
               ros2 run rtabmap_slam rtabmap --ros-args \
                 -p frame_id:=camera_color_optical_frame \
-                -p approx_sync:=true \
+                -p approx_sync:=false \
                 -p subscribe_depth:=true \
                 -p subscribe_rgbd:=false \
                 -p subscribe_rgb:=false \
@@ -83,7 +83,7 @@ jobs:
               trap cleanup EXIT
               sleep 8
               python3 -u scripts/rtabmap_tum_a1.py \
-                --frames 180 --every 3 --rate 5 --min-odom 20 \
+                --frames 150 --every 3 --rate 2 --min-odom 20 \
                 --data data/tum --output results/a1/rtabmap_real_tum.json \
                 > results/a1/replay.log 2>&1 || {
                   tail -100 results/a1/replay.log
