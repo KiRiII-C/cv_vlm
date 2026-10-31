@@ -1,0 +1,80 @@
+name: A0 RTAB-Map Docker geometry and reuse baseline
+
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - Dockerfile
+      - pyproject.toml
+      - src/**
+      - scripts/benchmark_geometry_reuse.py
+      - docs/experiments/rtabmap_geometry_a0.md
+      - .github/workflows/rtabmap-geometry-a0.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rtabmap-geometry-a0:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout experiment
+        uses: actions/checkout@v4
+
+      - name: Build Docker image with ROS 2 Jazzy and RTAB-Map
+        run: |
+          set -euo pipefail
+          docker build --progress=plain -t cv-vlm:jazzy-a0 . 2>&1 | tee docker_build.log
+
+      - name: RTAB-Map package audit and reproducible CPU benchmark
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p results/a0
+          docker run --rm \
+            --env GITHUB_SHA="$GITHUB_SHA" \
+            --volume "$PWD:/workspace" \
+            --workdir /workspace \
+            cv-vlm:jazzy-a0 bash -lc '
+              set -euo pipefail
+              source /opt/ros/jazzy/setup.bash
+              ros2 pkg prefix rtabmap_slam
+              ros2 pkg prefix rtabmap_util
+              ros2 pkg executables rtabmap_slam
+              ros2 pkg executables rtabmap_util
+              python3 scripts/benchmark_geometry_reuse.py \
+                --iterations 20 --output results/a0/geometry_reuse.json
+            ' 2>&1 | tee results/a0/run.log
+
+      - name: Validate narrow A0 assertions
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("results/a0/geometry_reuse.json").read_text())
+          assert d["status"]=="SYNTHETIC_MICROBENCHMARK_ONLY"
+          assert d["rtabmap_slam_evaluated"] is False
+          assert d["real_dataset_used"] is False
+          assert d["image_width"]==640 and d["image_height"]==480
+          assert d["duplicate_backprojections_per_frame"]==2
+          assert d["shared_backprojections_per_frame"]==1
+          assert d["max_absolute_xyz_error_m"] < 1e-6
+          assert len(d["valid_mask_points"])==2 and min(d["valid_mask_points"])>1000
+          assert d["duplicate_median_ms"]>0 and d["shared_median_ms"]>0
+          print("PASS: A0 equivalence, ROS package audit, and CPU timings")
+          PY
+
+      - name: Upload measurements and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rtabmap-geometry-a0
+          path: |
+            results/a0/
+            docker_build.log
+          if-no-files-found: warn
+          retention-days: 30
