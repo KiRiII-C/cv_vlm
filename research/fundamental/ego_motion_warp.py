@@ -63,6 +63,14 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--name',required=True)
     p.add_argument('--intrinsics',required=True);p.add_argument('--out',default='results/real_rgbd');a=p.parse_args()
     f=load(a.root,list(map(float,a.intrinsics.split(','))))
+    if a.name == 'bonn_box':
+        from bonn_extrinsics import camera_pose_from_marker
+        corrected=[]
+        for rgb,z,K,R,T in f:
+            pose=np.eye(4);pose[:3,:3]=R;pose[:3,3]=T
+            pose=camera_pose_from_marker(pose)
+            corrected.append((rgb,z,K,pose[:3,:3],pose[:3,3]))
+        f=corrected
     records=[r for i in range(len(f)-2) if (r:=compare(f[i],f[i+2])) is not None]
     if len(records)<8:raise RuntimeError('Too few real correspondences')
     weights=np.array([r['n'] for r in records])
