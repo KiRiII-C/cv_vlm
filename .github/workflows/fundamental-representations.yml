@@ -7,6 +7,9 @@ on:
       - 'research/fundamental/**'
       - 'Docs/fundamental-research-20261102.md'
       - '.github/workflows/fundamental-representations.yml'
+  pull_request:
+    branches:
+      - 'feature/semantic-memory-mapping'
   workflow_dispatch:
 jobs:
   physical-1000:
