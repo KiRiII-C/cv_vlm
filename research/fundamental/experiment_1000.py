@@ -113,7 +113,12 @@ def memory(v,name):
     elif name=="min":z=a.min(0)
     elif name=="medoid":z=a[np.argmin(np.linalg.norm(a[:,None]-a[None,:],axis=-1).sum(1))]
     elif name=="weighted":z=np.average(a,axis=0,weights=np.arange(1,len(a)+1))
-    elif name=="trim":z=np.median(a,axis=0)
+    elif name=="trim":
+        z=a.mean(0)
+        for _ in range(4):
+            d=np.linalg.norm(a-z,axis=1)
+            weights=np.minimum(1.0,.15/np.maximum(d,1.e-8))
+            z=np.average(a,axis=0,weights=weights)
     return norm(z)
 def get_scene(rng,ood):
     objs=[]
@@ -131,7 +136,7 @@ def get_scene(rng,ood):
                 else:refs[j].append(obs)
     ids=[j for j in range(5) if len(refs[j])>=2 and j in query]
     return refs,query,ids
-def run(n=40):
+def run(n=100):
     rng=np.random.default_rng(SEED)
     scenes=[get_scene(rng,i>=n//2) for i in range(n)]
     cache=[]
