@@ -2,7 +2,7 @@ name: Real sensor RGB-D fundamentals
 on:
   push:
     branches: ['experiments/fundamental-spatial-representations-*']
-    paths: ['research/fundamental/real_rgbd.py', 'research/fundamental/predictive_state.py', 'research/fundamental/ego_motion_warp.py', 'research/fundamental/bonn_calibration_audit.py', 'research/fundamental/real_neural_contrastive.py', '.github/workflows/real-rgbd-fundamentals.yml']
+    paths: ['research/fundamental/real_rgbd.py', 'research/fundamental/predictive_state.py', 'research/fundamental/ego_motion_warp.py', 'research/fundamental/bonn_calibration_audit.py', 'research/fundamental/real_neural_contrastive.py', 'research/fundamental/multiview_evidence.py', '.github/workflows/real-rgbd-fundamentals.yml']
   pull_request:
     branches:
       - 'feature/semantic-memory-mapping'
@@ -75,6 +75,15 @@ jobs:
         run: |
           ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
           python research/fundamental/real_neural_contrastive.py --root "$ROOT" --epochs 8
+      - name: EXP-20261102-01 real multiview evidence memory
+        shell: bash
+        run: |
+          ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          if [[ '${{ matrix.dataset }}' == 'tum_xyz' ]]; then
+            python research/fundamental/multiview_evidence.py --root "$ROOT" --dataset tum_xyz --intrinsics 517.3,516.5,318.6,255.3 --frames 100
+          else
+            python research/fundamental/multiview_evidence.py --root "$ROOT" --dataset bonn_box --intrinsics 542.822841,542.576870,315.593520,237.756098 --frames 100
+          fi
       - name: Upload measured results (not source data)
         if: always()
         uses: actions/upload-artifact@v4
