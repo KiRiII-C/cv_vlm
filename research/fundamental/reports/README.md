@@ -20,6 +20,7 @@
 | [EXP-20261102-01](EXP-20261102-01.md) | Многовидовая физическая память и отказ при низкой достоверности | **PASS**: TUM+Bonn; [CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/41359143691) |
 | [EXP-20261102-02](EXP-20261102-02.md) | Hard-negative проверка локальных 2D/3D-дескрипторов | **PASS**: TUM+Bonn; [CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/41359330363) |
 | [EXP-20261102-03](EXP-20261102-03.md) | Проверка переноса 5 обученных RGB-D-энкодеров TUM → Bonn | **PASS**: обучение + independent evaluation; [CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/41359705084) |
+| [EXP-20261102-04](EXP-20261102-04-results.md) | 48 эпох, 6 RGB-D-архитектур × 2 seed, расширенные ViT и проверка Bonn | **PASS** 12/12; [CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/41360620282) |
 | [THEORY_NOTES](THEORY_NOTES.md) | Математические гипотезы, наблюдаемость и ограничения новизны | Гипотезы, не подтверждённые эксперименты |
 
 ## Ранее выполненные работы
