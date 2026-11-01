@@ -1,5 +1,24 @@
 # Fundamental research on RGB-D scene memory — 2026-11-02
 
+## Consolidated corrected real-data results (supersedes preliminary Bonn metrics below)
+
+After an explicit **calibration audit** against the published Bonn marker-to-camera extrinsic, selected on the first half and evaluated on the last half, the preferred convention was \`T_world_camera = T_world_marker @ T_ROS @ T_m\`. Held-out median inter-frame depth reprojection error changed from **0.2835 m** (uncorrected) to **0.0458 m**. The originally reported Bonn descriptor and voxel coverage numbers were therefore invalid; use the **corrected** numbers below (GitHub Actions [successful run](https://github.com/KiRiII-C/cv_vlm/actions/runs/41357393506)).
+
+Corrected Bonn results: RGB descriptor 90.632%, DCT 89.520%, depth geometry 89.871%, pairwise 3D-distance spectrum 89.754%, camera-frame XYZ 90.340%, fused RGB+3D 93.443% over **1708** measured correspondences. Eight-frame memory held-out observed-voxel recall: uniform 0.70181; random single seed 0.62033; greedy 0.72575; Jaccard-diverse 0.56321. Oracle-pose ego-motion compensation: RGB MAE 0.17940 → 0.11724, depth MAE 0.36588m → 0.15227m, over 54 frame pairs; this is not SLAM and does not certify dynamic object segmentation.
+
+**Actually trained neural representations** on TUM real RGB-D: 100 frames, 1719 GT-posed positive patch pairs, 1155 train/564 temporal holdout, 8 epochs from scratch. Patch-ranking scores: MLP 0.950355 (45,728 parameters), RGB CNN 0.907801 (8,672), RGB-D CNN 0.943262 (8,888), RGB + locally-centered XYZ CNN 0.904255 (9,320), one-layer patch Transformer 0.969858 (22,736). Unequal capacities, one room, relatively easy random negatives; does not establish Transformer superiority in 3D mapping.
+
+**Negative control: predictive memory.** 140 real frames per sequence; one-step normalized RGB/inverse-depth MAE with rank-8 latent encoding, persistence vs per-frame PCA vs 3-frame Hankel SVD:
+- TUM RGB: 0.128754 / 0.171787 / 0.198222; inverse-depth: 0.042743 / 0.058815 / 0.065920.
+- Bonn RGB: 0.047163 / 0.108804 / 0.125065; inverse-depth: 0.007422 / 0.038717 / 0.041831.
+The simplistic compressed predictive states **lost** to persistence. Formulating a latent state without separating ego-motion does not by itself yield useful spatial memory.
+
+The source implementation and real-data download workflows are in this branch. All measured results are GitHub Actions artifacts; the old Bonn table below should be considered an audit trail, **not the final result**.
+
+---
+
+
+
 ## Evidence levels
 
 - **Executed on real RGB-D:** TUM fr1/xyz (798 synchronized pairs; 56 sampled frames), Bonn moving_obstructing_box (590 pairs; 56 frames). Full source and raw CI logs: [GitHub Actions run](https://github.com/KiRiII-C/cv_vlm/actions/runs/41356590629).
