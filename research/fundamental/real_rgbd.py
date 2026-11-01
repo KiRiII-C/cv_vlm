@@ -111,6 +111,14 @@ def main():
     p.add_argument('--n',type=int,default=48);a=p.parse_args()
     rng=np.random.default_rng(SEED)
     f,total=load(a.root,list(map(float,a.intrinsics.split(','))),a.n)
+    if a.dataset == 'bonn_box':
+        from bonn_extrinsics import camera_pose_from_marker
+        corrected=[]
+        for rgb,z,pts,world,R,T,K in f:
+            pose=np.eye(4);pose[:3,:3]=R;pose[:3,3]=T
+            pose=camera_pose_from_marker(pose)
+            corrected.append((rgb,z,pts,pts@pose[:3,:3].T+pose[:3,3],pose[:3,:3],pose[:3,3],K))
+        f=corrected
     x=matching(f,rng);y=memory(f,rng)
     out=pathlib.Path(a.out)/a.dataset;out.mkdir(parents=True,exist_ok=True)
     for filename,rows in [('descriptors.csv',x),('memory.csv',y)]:
