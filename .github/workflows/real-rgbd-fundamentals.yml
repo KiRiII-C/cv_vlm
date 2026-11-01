@@ -2,7 +2,7 @@ name: Real sensor RGB-D fundamentals
 on:
   push:
     branches: ['experiments/fundamental-spatial-representations-*']
-    paths: ['research/fundamental/real_rgbd.py', 'research/fundamental/predictive_state.py', 'research/fundamental/ego_motion_warp.py', 'research/fundamental/bonn_calibration_audit.py', '.github/workflows/real-rgbd-fundamentals.yml']
+    paths: ['research/fundamental/real_rgbd.py', 'research/fundamental/predictive_state.py', 'research/fundamental/ego_motion_warp.py', 'research/fundamental/bonn_calibration_audit.py', 'research/fundamental/real_neural_contrastive.py', '.github/workflows/real-rgbd-fundamentals.yml']
   pull_request:
     branches:
       - 'feature/semantic-memory-mapping'
@@ -66,6 +66,15 @@ jobs:
         run: |
           ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
           python research/fundamental/bonn_calibration_audit.py --root "$ROOT"
+      - name: Install CPU PyTorch for real-data encoder comparison
+        if: matrix.dataset == 'tum_xyz'
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Train and evaluate five patch encoders on real RGB-D
+        if: matrix.dataset == 'tum_xyz'
+        shell: bash
+        run: |
+          ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          python research/fundamental/real_neural_contrastive.py --root "$ROOT" --epochs 8
       - name: Upload measured results (not source data)
         if: always()
         uses: actions/upload-artifact@v4
