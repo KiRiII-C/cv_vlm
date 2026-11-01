@@ -48,7 +48,7 @@ def raycast(objects,view,rng,shift=False):
     rgb=np.full((W*H,3),.07)
     for j,(c,r,shape,col) in enumerate(objects):
         m=ids==j
-        rgb[m]=col*(1+.12*np.sin(xyz[m,0]*15+j))
+        rgb[m]=col[None,:]*(1+.12*np.sin(xyz[m,0]*15+j))[:,None]
     rgb+=rng.normal(0,.025,rgb.shape)
     dep+=rng.normal(0,.018,dep.shape)
     drop=rng.random(len(dep))<.1
