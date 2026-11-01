@@ -1,5 +1,5 @@
 """Tiny scratch-trained RGB/RGB-D neural encoders on real cross-view matched patches.
-Five inductive biases: MLP, RGB CNN, RGB-D CNN, centered-XYZ CNN, patch Transformer.
+Five inductive biases: MLP, RGB CNN, RGB-D CNN, depth-and-local-XYZ CNN, patch Transformer.
 GT camera poses generate only training/evaluation correspondence labels.
 Not foundation-model training; small pretext benchmark, single scene.
 """
@@ -64,7 +64,7 @@ def pairs(frames):
 class Encoder(nn.Module):
     def __init__(self,kind):
         super().__init__();self.kind=kind
-        c=3 if kind=='rgb_cnn' else 6 if kind=='geometry_cnn' else 4
+        c=3 if kind=='rgb_cnn' else 4
         if kind=='mlp':self.net=nn.Sequential(nn.Flatten(),nn.Linear(c*81,128),nn.GELU(),nn.Linear(128,32))
         elif kind=='patchvit':
             self.proj=nn.Linear(c*9,48);self.pos=nn.Parameter(torch.zeros(1,9,48))
@@ -74,13 +74,13 @@ class Encoder(nn.Module):
                 nn.Conv2d(24,32,3,padding=1),nn.GELU(),nn.AdaptiveAvgPool2d(1),
                 nn.Flatten(),nn.Linear(32,32))
     def forward(self,x):
-        x=x[:,:3] if self.kind=='rgb_cnn' else x[:,:6] if self.kind=='geometry_cnn' else x[:,:4]
+        x=x[:,3:7] if self.kind=='geometry_cnn' else x[:,:3] if self.kind=='rgb_cnn' else x[:,:4]
         if self.kind=='patchvit':
             tokens=F.unfold(x,3,stride=3).transpose(1,2)
             z=self.head(self.enc(self.proj(tokens)+self.pos).mean(1))
         else:z=self.net(x)
         return F.normalize(z,dim=-1)
-def train(X,Y,times,epochs):
+def train(X,Y,times,epochs,checkpoint_dir=None):
     sep=int(.7*(times.max()+1));it=np.where(times<sep)[0];iv=np.where(times>=sep)[0]
     if len(it)<150 or len(iv)<60:raise RuntimeError(f'Insufficient real GT-paired patches: {len(it)}, {len(iv)}')
     rng=np.random.default_rng(SEED);results={}
@@ -98,6 +98,9 @@ def train(X,Y,times,epochs):
         with torch.no_grad():
             a=net(X[iv]);p=net(Y[iv]);neg=p.roll(1,0)
             rank=float(((a*p).sum(-1)>(a*neg).sum(-1)).float().mean())
+        if checkpoint_dir is not None:
+            pathlib.Path(checkpoint_dir).mkdir(parents=True,exist_ok=True)
+            torch.save(net.state_dict(),str(pathlib.Path(checkpoint_dir)/f'{name}.pt'))
         results[name]={'ranking_accuracy':round(rank,6),'train':len(it),'test':len(iv),
                        'parameter_count':sum(p.numel() for p in net.parameters()),'epochs':epochs}
     return results
@@ -106,7 +109,7 @@ def main():
     p.add_argument('--out',default='results/real_rgbd/tum_xyz');p.add_argument('--epochs',type=int,default=8);a=p.parse_args()
     frames=sequence(a.root);X,Y,t=pairs(frames)
     print('real measured GT-paired patches:',len(X),flush=True)
-    scores=train(X,Y,t,a.epochs)
+    scores=train(X,Y,t,a.epochs,checkpoint_dir=pathlib.Path(a.out)/'checkpoints')
     report={'dataset':'TUM fr1 xyz real RGB-D','frames':len(frames),'pairs':len(X),'scores':scores,
         'caveats':'Single scene, tiny scratch-trained models, correspondence ranking only, not 3D object ID or foundation model superiority.'}
     out=pathlib.Path(a.out);out.mkdir(parents=True,exist_ok=True)
