@@ -3,6 +3,9 @@ on:
   push:
     branches: ['experiments/fundamental-spatial-representations-*']
     paths: ['research/fundamental/real_rgbd.py', '.github/workflows/real-rgbd-fundamentals.yml']
+  pull_request:
+    branches:
+      - 'feature/semantic-memory-mapping'
   workflow_dispatch:
 jobs:
   real-sequences:
