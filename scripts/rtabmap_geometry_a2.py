@@ -51,13 +51,36 @@ def associate(metrics,published,odom,min_matches=20,max_lag=0.05):
         T[:3,3]=xyz
         validate_pose(T)
         assignments[idx]={"lag":lag,"T_map_cam":T.tolist()}
+    # Disjoint tracks after visual odometry loss are NOT safely co-registered.
+    # Reconstruct only the longest continuous, physically plausible segment.
+    indices=sorted(assignments)
+    segments=[]
+    for idx in indices:
+        if not segments:
+            segments.append([idx])
+            continue
+        prev=segments[-1][-1]
+        dt=float(published[idx]["source_tum_timestamp"])-float(published[prev]["source_tum_timestamp"])
+        pa=np.asarray(assignments[prev]["T_map_cam"],dtype=float)
+        pb=np.asarray(assignments[idx]["T_map_cam"],dtype=float)
+        translation=np.linalg.norm(pb[:3,3]-pa[:3,3])
+        angle=np.linalg.norm(Rotation.from_matrix(pa[:3,:3].T@pb[:3,:3]).as_rotvec())
+        if idx==prev+1 and 0<dt<0.2 and translation<0.5 and angle<1.5:
+            segments[-1].append(idx)
+        else:
+            segments.append([idx])
+    chosen=max(segments,key=len) if segments else []
     poses=[]
-    for idx,entry in sorted(assignments.items()):
+    for idx in chosen:
+        entry=assignments[idx]
         poses.append({"timestamp":float(published[idx]["source_tum_timestamp"]),
                       "T_map_cam":entry["T_map_cam"],
-                      "association_lag_s":entry["lag"]})
+                      "association_lag_s":entry["lag"],
+                      "published_index":idx})
     if len(poses)<min_matches:
-        raise RuntimeError(f"Not enough matched real poses for A2: {len(poses)}")
+        raise RuntimeError(
+            f"No long enough CONTINUOUS odometry segment: longest={len(poses)}, "
+            f"total_valid_matched={len(assignments)}")
     return poses
 
 
@@ -105,6 +128,8 @@ def main():
             "published_frames":len(published),
             "real_odometry_messages":len(odom),
             "selected_real_pose_frames":len(pairs),
+            "excluded_noncontiguous_valid_frames":sum(bool(x.get("valid")) for x in odom)-len(pairs),
+            "selected_published_index_interval":[poses[0]["published_index"],poses[-1]["published_index"]],
             "input_ATE_RMSE_m":metrics.get("ATE_RMSE_m"),
             "geometry_accuracy":"NOT_EVALUATED",
             "reconstruction_run":bool(args.reconstruct)}
