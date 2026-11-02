@@ -1,0 +1,74 @@
+name: C0 real B5 detections into persistent ObjectMemoryV2
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/c0-real-b5-memory.yml
+      - scripts/c0_replay_real_b5_memory.py
+      - tests/test_c0_b5_memory_bridge.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  c0-real-memory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: b5-real-TUM-RTABMap-YOLOE26x-semantic-map
+          run-id: 41467501932
+          github-token: ${{ github.token }}
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: a6-full-tum-graph-geometric-evidence
+          run-id: 41444730029
+          github-token: ${{ github.token }}
+          path: .
+      - name: Test evidence conservation and existing ObjectMemoryV2
+        run: |
+          set -euo pipefail
+          python -m pip install -e '.[test]'
+          python -m pytest -q tests/test_c0_b5_memory_bridge.py tests/test_object_memory_v2.py
+      - name: Replay real full B5 871 3D observations, never infer disappearance from detector absence
+        run: |
+          set -euo pipefail
+          python -u scripts/c0_replay_real_b5_memory.py \
+            --observations results/b5/b5_object_observations.jsonl \
+            --poses results/a6/optimized_full_poses.json \
+            --out results/c0 | tee c0_real.log
+          python - <<'PY'
+          import json,sqlite3
+          from pathlib import Path
+          path=Path('results/c0')
+          d=json.loads((path/'c0_summary.json').read_text())
+          lines=(path/'c0_event_audit.jsonl').read_text().splitlines()
+          raw=(Path('results/b5/b5_object_observations.jsonl').read_text().splitlines())
+          assert len(lines)==len(raw)==d['original_observations']==871
+          assert d['observations_persisted']>100
+          assert d['no_image_appearance_embeddings_supplied'] is True
+          assert d['new_uuid_is_not_verified_physical_ID'] is True
+          assert d['absence_of_detection_does_not_mark_deleted'] is True
+          assert d['true_physical_instance_IDF1']=='NOT_EVALUATED_TUM_HAS_NO_INSTANCE_GT'
+          with sqlite3.connect(path/'object_memory.sqlite') as db:
+              n=db.execute('select count(*) from observations').fetchone()[0]
+              assert n==d['observations_persisted']
+              assert db.execute('select count(*) from object_evidence_v2').fetchone()[0]==n
+          print('C0_FULL_REAL_MEMORY_BRIDGE_PASS',d,flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: c0-real-TUM-B5-persistent-object-memory
+          path: |
+            results/c0/
+            c0_real.log
+          if-no-files-found: warn
+          retention-days: 30
