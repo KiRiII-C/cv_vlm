@@ -96,16 +96,23 @@ def replay(args, pairs):
         cam.k=[517.3,0.,318.6,0.,516.5,255.3,0.,0.,1.]
         cam.r=[1.,0.,0.,0.,1.,0.,0.,0.,1.]
         cam.p=[517.3,0.,318.6,0.,0.,516.5,255.3,0.,0.,0.,1.,0.]
-        image=Image();image.header=cam.header
-        image.height=h;image.width=w;image.encoding="bgr8"
-        image.is_bigendian=0;image.step=3*w;image.data=rgb.tobytes()
-        depth_image=Image();depth_image.header=cam.header
-        depth_image.height=h;depth_image.width=w;depth_image.encoding="16UC1"
-        depth_image.is_bigendian=0;depth_image.step=2*w;depth_image.data=depth_mm.tobytes()
+        # Compress before DDS to prevent 1.5MB raw sensor bursts.
+        # JPEG quality 95 retains visual features; depth PNG is LOSSLESS.
+        ok_rgb, jpeg=cv2.imencode(".jpg",rgb,[cv2.IMWRITE_JPEG_QUALITY,95])
+        ok_depth, png=cv2.imencode(".png",depth_mm,[cv2.IMWRITE_PNG_COMPRESSION,1])
+        if not ok_rgb or not ok_depth:
+            raise RuntimeError(f"RGB-D compression failed at frame {i}")
         packet=RGBDImage()
         packet.header=cam.header
-        packet.rgb_camera_info=cam;packet.depth_camera_info=cam
-        packet.rgb=image;packet.depth=depth_image
+        packet.rgb_camera_info=cam
+        packet.depth_camera_info=cam
+        packet.rgb_compressed.header=cam.header
+        packet.rgb_compressed.format="bgr8; jpeg compressed bgr8"
+        packet.rgb_compressed.data=jpeg.tobytes()
+        packet.depth_compressed.header=cam.header
+        # RTAB-Map legacy PNG depth payload is a standard 16-bit grayscale PNG.
+        packet.depth_compressed.format="png"
+        packet.depth_compressed.data=png.tobytes()
         pub.publish(packet)
         published.append({"idx":i,"ros_time":stamp.sec+stamp.nanosec*1e-9,
                           "source_tum_timestamp":float(tum_stamp)})
@@ -126,6 +133,7 @@ def replay(args, pairs):
       "pose_estimator":"rtabmap_odom/rgbd_odometry",
       "mapper":"rtabmap_slam/rtabmap",
       "RGBD_transport":"rtabmap_msgs/RGBDImage_one_atomic_message",
+      "RGBD_compression":"JPEG95_RGB_and_lossless_PNG_depth",
       "depth_encoding":"16UC1_mm_converted_from_TUM_5000",
       "ROS_header_time":"live_replay",
       "GT_used_as_input":False,"GT_only_for_metrics":True,
