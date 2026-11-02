@@ -31,6 +31,8 @@ def validated(root):
             raise RuntimeError('Missing training epochs '+str(key))
         if x['updates_per_epoch']!=15 or x['positive_draws_per_epoch']!=960:
             raise RuntimeError('Training budget mismatch '+str(key))
+        if x.get('unique_positive_index_per_minibatch') is not True:
+            raise RuntimeError('In-batch duplicate positive-ID risk '+str(key))
         if x['train_hard_query_indices']!=192:
             raise RuntimeError('Hard query support mismatch '+str(key))
         if x['Bonn_blind']['n_queries']<100 or x['TUM_desk_heldout']['n_queries']<45:
@@ -68,6 +70,7 @@ def synthesize(data, run_id=None, source_sha=None):
         '', 'Training observations: TUM fr1/xyz and fr1/desk; blind test: Bonn moving_obstructing_box.',
         'Same architecture, seed, 28 epochs, 420 optimizer steps, 960 positive draws per epoch,',
         '192 fixed xyz-only hard negatives per seed, matched 256 or 512 distinct correspondence indices.',
+        'All minibatches sample 64 distinct indices without replacement (no within-batch exact duplicates).',
         'Validation: TUM xyz/desk frames 64–78; late desk and Bonn are evaluation-only.',
         'GT camera poses are **oracle labels**; no instance ID or SLAM tested.',
         '']
