@@ -1,0 +1,59 @@
+name: B0 full real TUM shared RGBD geometry validation
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - src/semantic_map/shared_rgbd_geometry.py
+      - scripts/b0_shared_geometry_full_tum.py
+      - tests/test_shared_rgbd_geometry_b.py
+      - .github/workflows/b0-shared-rgbd-full-tum.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  shared-cloud:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: a6-full-tum-graph-geometric-evidence
+          run-id: 41444730029
+          github-token: ${{ github.token }}
+          path: .
+      - name: Install CPU research dependencies
+        run: |
+          python3 -m venv .b0env
+          .b0env/bin/pip install -q -e '.[test]'
+          .b0env/bin/python -m pytest tests/test_shared_rgbd_geometry_b.py -q
+      - name: Full real TUM 595/595 shared geometry baseline
+        run: |
+          set -euo pipefail
+          export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
+          PYTHONPATH=src:scripts .b0env/bin/python -u scripts/b0_shared_geometry_full_tum.py \
+            --poses results/a6/optimized_full_poses.json \
+            --data data/tum --output results/b0 | tee b0_full_run.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          s=json.loads(Path("results/b0/b0_full_tum_report.json").read_text())
+          assert s["counts"]["frames_total"]==595
+          assert s["counts"]["frames_with_measured_pose"]==594
+          assert s["counts"]["parity_failures"]==0
+          assert s["counts"]["pairs_reprojected"]>=500
+          assert s["ground_truth_used_as_input"] is False
+          print("B0_FULL_TUM_ACCEPTED",s["counts"],flush=True)
+          PY
+      - name: Save full-data geometry evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b0-full-real-tum-shared-cloud
+          path: |
+            results/b0/b0_full_tum_report.json
+            b0_full_run.log
+          if-no-files-found: warn
+          retention-days: 30
