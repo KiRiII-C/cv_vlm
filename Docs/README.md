@@ -19,7 +19,8 @@
 | A0 | Единое организованное RGB-D-облако против повторной проекции | PASS — синтетический CPU-тест; не бенчмарк RTAB-Map | [A0](experiments/A0_shared_geometry.md) |
 | A1 | Реальная RGB-D-одометрия и SLAM RTAB-Map | FUNCTIONAL_SMOKE_PASS: 98/150 валидных поз, ATE 5.58 см на подмножестве, 49 узлов и 1 глобальная петля; непрерывность не подтверждена | [A1](experiments/A1_real_tum_rtabmap.md) |
 | A2 | Геометрия по измеренным RTAB-Map-позам (не GT) | CANDIDATE_UNVALIDATED: 98 кадров, 10610 вершин TSDF; два разрозненных участка и отсутствие независимой проверки точности | [A2](experiments/A2_rtabmap_geometry.md) |
-| A3 | Оптимизированный граф RTAB-Map против исходного графа | FIRST_RUN_PASS: 37 общих ключевых кадров, ATE RMSE 4.32 → 3.62 см; геометрия NOT_VALIDATED, выполняются повторы | [A3](experiments/A3_optimized_graph.md) |
+| A3 | Оптимизация графа RTAB-Map против исходного | 3 REAL RUNS PASS — при loop closure ATE улучшалась на 16% и 57%, без closure улучшения нет; VO нестабильна | [A3](experiments/A3_optimized_graph.md) |
+| A3-R | Повторяемость A3 и влияние замыкания циклов | 3 RUNS COMPLETE / FRONTEND REPRODUCIBILITY LIMITED / 3D ACCURACY NOT_VALIDATED | [Отчёт](experiments/A3_repeatability.md) |
 
 ## Область действия
 
