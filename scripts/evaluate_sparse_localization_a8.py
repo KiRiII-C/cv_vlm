@@ -124,7 +124,7 @@ def evaluate(root:Path,gt_path:Path):
             "rpe_rotation_rmse_deg":v["successive_accepted_pose_relative_rotation_error_deg"].get("rmse"),
             "holdout_rmse_m":(v["temporal_holdout_alignment"] or {}).get(
                 "translation_errors_m",{}).get("rmse")}
-        for k,v in reports.items()},flush=True)
+        for k,v in reports.items()}),flush=True)
     return result
 
 def main():
