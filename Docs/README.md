@@ -31,6 +31,8 @@
 | B1 | YOLOE-26s masks → реальные 3D наблюдения → short-term IDs на полных TUM depth кадрах | **FULL_DEPTH_PIPELINE_PASS**: 595 depth, 119 YOLO keyframes, 908 масок, 863 3D наблюдения, 94 tracklets; physical ID NOT_VALIDATED | [B0–B2](experiments/B0_B1_B2_perception_and_short_tracks.md) |
 | B1-X | Сравнение официальных YOLOE-26x и 26s на одинаковых 595 RGB-D кадрах и 119 keyframes | **CPU_FULL_DATASET_PASS**: 26s 97.17 мс, 863 3D наблюдения; 26x 724.24 мс, 871 наблюдение; physical GT для TUM отсутствует | [B1-X](experiments/B1x_YOLOE26s_vs_26x_full_tum.md) |
 | B2 | Короткий 3D tracking по физическим GT ID на 3×100 Hypersim кадрах с настоящими YOLOE-26x предсказаниями | **GT_PHYSICAL_ID_FAIL**: pooled IDF1 13.59% 3D, 14.50% + HSV; геометрия Hypersim GT, не RTAB-Map | [B0–B2](experiments/B0_B1_B2_perception_and_short_tracks.md) |
+| B3 | YOLOE-маски: z-buffer + depth проверка, выборка 2500 vs 30000 точек и splat | **FULL_TUM_PASS**: 595 depth, 119 YOLO keyframes, 576 одинаковых масковых пар; медиана IoU 0.187→0.587→0.711; physical GT NOT_VALIDATED | [B3](experiments/B3_real_mask_reprojection.md) |
+| B4 | Real YOLOE-26x + Hypersim physical GT: centroid+HSV против многовидовых 3D-соответствий | RUNNING — все 3×100 кадров, физические ID только для оценки; pair ROC AUC/AP, не track IDF1 | [B4](experiments/B4_physical_gt_surface_association.md) |
 
 
 **Полнота данных:** начиная с A4 все новые эксперименты должны обрабатывать все доступные синхронизированные RGB-D-пары выбранного датасета; лимиты вида 150 кадров и каждый третий кадр запрещены. Исторические A1–A3 не соответствовали этому требованию и не являются полными прогонами.
