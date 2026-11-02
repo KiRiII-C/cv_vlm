@@ -91,7 +91,8 @@ def main():
         for instance,points in cloud.items():
             data=evidence(points,row["xyz"],row["quaternion"],obs,
                           pose_xyz_cov=row.get("cov_xyz"))
-            data.update({"frame":frame,"original_tum_timestamp":stamps[ns]["source_tum_timestamp"],
+            data.update({"frame":frame,"xyz":row["xyz"],"quaternion":row["quaternion"],
+                         "original_tum_timestamp":stamps[ns]["source_tum_timestamp"],
                          "source_uuid_hypothesis":names[instance],
                          "instance_index":instance,
                          "accepted_map_pose_only":True})
