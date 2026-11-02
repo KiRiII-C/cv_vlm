@@ -74,7 +74,7 @@ def render(points,labels,purity,base,out):
         sub.set_xlabel("X, м",color="#9fb2ca");sub.set_ylabel(("Y" if dim==1 else "Z")+", м",color="#9fb2ca")
         sub.tick_params(colors="#9fb2ca");sub.grid(alpha=.14)
     fig.text(.04,.946,"ПЛОТНАЯ СЕМАНТИЧЕСКАЯ КАРТА",color="white",size=21,weight="bold")
-    fig.text(.04,.91,"RTAB-Map A6 + YOLOE-26x · реальные RGB-D · голосование классов внутри 1.2-см вокселя",
+    fig.text(.04,.91,"RTAB-Map A6 + YOLOE-26x · реальные RGB-D · взвешенное голосование классов в измеренных пространственных вокселях",
              color="#a8bad0",size=10)
     names=[x for x in sorted(set(labels)) if x in COLORS]
     from matplotlib.lines import Line2D
