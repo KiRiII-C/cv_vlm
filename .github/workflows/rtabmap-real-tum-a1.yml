@@ -5,7 +5,7 @@ on:
     branches:
       - experiments/rtabmap-geometry-a0-20261031
     paths:
-      - scripts/rtabmap_tum_a1.py
+      - scripts/rtabmap_tum_a1_v2.py
       - .github/workflows/rtabmap-real-tum-a1.yml
   workflow_dispatch:
 
@@ -49,12 +49,15 @@ jobs:
               export PYTHONUNBUFFERED=1
               ros2 pkg prefix rtabmap_odom
               ros2 pkg prefix rtabmap_slam
-              python3 scripts/rtabmap_tum_a1.py --download-only --frames 150 --every 3 --data data/tum
+              python3 -m py_compile scripts/rtabmap_tum_a1_v2.py
+              python3 scripts/rtabmap_tum_a1_v2.py --download-only --frames 150 --every 3 --data data/tum
               ros2 run rtabmap_odom rgbd_odometry --ros-args \
                 -p frame_id:=camera_color_optical_frame \
-                -p approx_sync:=false \
-                -p subscribe_rgbd:=false \
+                -p approx_sync:=true \
+                -p subscribe_rgbd:=true \
                 -p publish_tf:=true \
+                -p always_process_most_recent_frame:=false \
+                -r rgbd_image:=/camera/rgbd_image \
                 -r rgb/image:=/camera/rgb/image \
                 -r depth/image:=/camera/depth/image \
                 -r rgb/camera_info:=/camera/rgb/camera_info \
@@ -62,13 +65,16 @@ jobs:
               ODOM_PID=$!
               ros2 run rtabmap_slam rtabmap --ros-args \
                 -p frame_id:=camera_color_optical_frame \
-                -p approx_sync:=false \
+                -p approx_sync:=true \
                 -p subscribe_depth:=true \
-                -p subscribe_rgbd:=false \
+                -p subscribe_rgbd:=true \
                 -p subscribe_rgb:=false \
                 -p subscribe_odom_info:=false \
+                -p sync_queue_size:=30 \
+                -p topic_queue_size:=30 \
                 -p publish_tf:=false \
                 -p database_path:=/workspace/results/a1/rtabmap.db \
+                -r rgbd_image:=/camera/rgbd_image \
                 -r rgb/image:=/camera/rgb/image \
                 -r depth/image:=/camera/depth/image \
                 -r rgb/camera_info:=/camera/rgb/camera_info \
@@ -82,7 +88,7 @@ jobs:
               }
               trap cleanup EXIT
               sleep 8
-              python3 -u scripts/rtabmap_tum_a1.py \
+              python3 -u scripts/rtabmap_tum_a1_v2.py \
                 --frames 150 --every 3 --rate 2 --min-odom 20 \
                 --data data/tum --output results/a1/rtabmap_real_tum.json \
                 > results/a1/replay.log 2>&1 || {
@@ -109,6 +115,8 @@ jobs:
           assert d["pose_estimator"]=="rtabmap_odom/rgbd_odometry"
           assert d["published_frames"]>=100
           assert d["odometry_messages"]>=20, d
+          assert d["valid_odometry_messages"]>=20, d
+          assert d["valid_odom_translation_spread_m"]>=0.02, d
           assert d["matched_gt_frames"]>=20, d
           assert math.isfinite(d["ATE_RMSE_m"]),d
           db=root/"rtabmap.db"
