@@ -104,6 +104,7 @@ jobs:
       - name: Validate recorded odometry and actual RTAB-Map database
         run: |
           set -euo pipefail
+          sudo chmod -R a+rwX results/a1
           python3 - <<'PY'
           from pathlib import Path
           import json, sqlite3, math
@@ -126,11 +127,35 @@ jobs:
           assert "Node" in tables, tables
           nodes=c.execute("SELECT COUNT(*) FROM Node").fetchone()[0]
           assert nodes>=2, f"No RTAB-Map graph nodes: {nodes}"
+          d["valid_odometry_fraction"]=d["valid_odometry_messages"]/d["published_frames"]
+          d["odometry_stream_fraction"]=d["odometry_messages"]/d["published_frames"]
+          d["trajectory_tracking_status"]="PARTIAL_COVERAGE" if d["valid_odometry_fraction"]<0.80 else "CANDIDATE_CONTINUOUS"
           d["rtabmap_database_nodes"]=nodes
           d["rtabmap_database_bytes"]=db.stat().st_size
           p.write_text(json.dumps(d,indent=2)+"\n")
           print("A1_REAL_TUM_RTABMAP_VALIDATED", {k:d[k] for k in ("published_frames","odometry_messages","matched_gt_frames","ATE_RMSE_m","rtabmap_database_nodes")})
           PY
+
+      - name: A2 reconstruct real measured-pose RGB-D geometry (exploratory)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p results/a2
+          docker run --rm \
+            -v "$PWD:/workspace" -w /workspace \
+            cv-vlm:jazzy-a1 bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              /opt/semantic-venv/bin/pip install --no-cache-dir "open3d==0.19.0" \
+                > results/a2/open3d_install.log 2>&1 || {
+                  tail -40 results/a2/open3d_install.log
+                  exit 1
+                }
+              python3 scripts/rtabmap_geometry_a2.py \
+                --a1-prefix results/a1/rtabmap_real_tum \
+                --data data/tum --output results/a2 --min-poses 20 \
+                --reconstruct --voxel 0.06
+            '
 
       - name: Export real experimental evidence
         if: always()
@@ -139,6 +164,7 @@ jobs:
           name: a1-tum-rtabmap-evidence
           path: |
             results/a1/
+            results/a2/
             docker_a1_build.log
           if-no-files-found: warn
           retention-days: 30
