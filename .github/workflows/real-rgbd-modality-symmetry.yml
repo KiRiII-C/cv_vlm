@@ -4,6 +4,7 @@ on:
     branches: ['experiments/fundamental-spatial-representations-*']
     paths:
       - 'research/fundamental/modality_negative_symmetry.py'
+      - 'research/fundamental/evidence_freshness_memory.py'
       - '.github/workflows/real-rgbd-modality-symmetry.yml'
   pull_request:
     branches: ['feature/semantic-memory-mapping']
@@ -53,6 +54,12 @@ jobs:
           ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
           python research/fundamental/modality_negative_symmetry.py \
             --root "$ROOT" --dataset '${{ matrix.dataset }}' --n 76 --queries 32
+      - name: EXP-20261102-06 evidence-aware physical memory on real depth
+        shell: bash
+        run: |
+          ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          python research/fundamental/evidence_freshness_memory.py \
+            --root "$ROOT" --dataset '${{ matrix.dataset }}' --n 100
       - name: Verify no generated/simulated observations and complete metrics
         shell: bash
         run: |
@@ -66,12 +73,17 @@ jobs:
           for m,rows in o['results'].items():
               assert all(0<=rows[policy]['rank1']<=1
                   for policy in ('random','color_hard','geometry_hard','balanced_hard'))
-          print('PASS EXP05:',dataset,o['n_query_points'])
+          memory=json.loads((pathlib.Path('results/real_rgbd/age_memory')/(dataset+'.json')).read_text())
+          assert len(memory['methods'])==6
+          assert memory['targets']>=20
+          print('PASS EXP05 + EXP06:',dataset,o['n_query_points'],memory['targets'])
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: exp05-${{ matrix.dataset }}-all-negative-policies
-          path: results/real_rgbd/modal_hardness/
+          path: |
+            results/real_rgbd/modal_hardness/
+            results/real_rgbd/age_memory/
           if-no-files-found: warn
           retention-days: 30
