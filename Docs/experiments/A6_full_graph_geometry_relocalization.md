@@ -87,6 +87,12 @@
 
 Код: [replay](../../scripts/full_tum_relocalize_a6.py), [monitor](../../scripts/monitor_relocalization_a6.py), [workflow](../../.github/workflows/rtabmap-relocalization-a6.yml).
 
+### A6-L: первый запуск и исправление конфигурации
+
+[Первый GitHub Actions 41445295567](https://github.com/KiRiII-C/cv_vlm/actions/runs/41445295567): **FAIL на этапе запуска режима локализации**, а не отказ визуального сопоставления. Первый полный картографический проход и база `rtabmap.db` прошли успешно. Во второй сессии ROS 2 ошибочно распознал `Mem/IncrementalMemory` как параметр boolean, хотя RTAB-Map объявляет его как строку. Узел `rtabmap_slam` завершился `InvalidParameterTypeException`, replay зафиксировал отсутствие второго подписчика RGB-D. **Никаких данных об успехе или неуспехе поиска места на карте из этой попытки нет.**
+
+Исправление: `-p "Mem/IncrementalMemory:=\\\"false\\\""`, аналогично `Mem/LocalizationReadOnly` и `RGBD/StartAtOrigin`. Проверена передача аргумента ROS как строкового значения; новый полный запуск [41446136824](https://github.com/KiRiII-C/cv_vlm/actions/runs/41446136824) инициирован. До фактического завершения статус локализации **RUNNING / NOT_VALIDATED**.
+
 ## Ограничения и критерии
 
 Итог делить на четыре независимых статуса: `ODOMETRY_COVERAGE`, `GRAPH_POSE_ACCURACY`, `REFERENCE_GEOMETRY_CONSISTENCY`, `RELOCALIZATION_SMOKE_TEST`. Каждый из них требует собственных артефактов и проверок. Нельзя утверждать качество навигации на основании лишь ненулевой TSDF или сообщений RTAB-Map без GT/наблюдений.
