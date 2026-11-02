@@ -1,0 +1,115 @@
+name: C4 real multi-view object hypothesis evidence after independent TUM desk2
+on:
+  push:
+    branches: ['experiments/rtabmap-geometry-a0-20261031']
+    paths:
+      - 'scripts/c4_multiview_uuid_evidence.py'
+      - 'tests/test_c4_multiview_uuid_evidence.py'
+      - 'Docs/experiments/C4_cross_session_multiview_consensus.md'
+      - '.github/workflows/c4-cross-session-multiview-consensus.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  c4-real-consensus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only numerical dependency for evidence fusion
+        run: python -m pip install 'numpy>=1.26,<3'
+      - name: Validate math and no-forced-identity safety invariants
+        run: |
+          python -m py_compile scripts/c4_multiview_uuid_evidence.py
+          python -m unittest discover -s tests -p 'test_c4_multiview_uuid_evidence.py' -v
+      - name: Download recorded C2 depth evidence for all 15 old UUID hypotheses
+        uses: actions/download-artifact@v4
+        with:
+          name: c2-independent-full-TUM-depth-15-C1-UUID-visibility
+          run-id: 41489070935
+          github-token: ${{ github.token }}
+          path: .
+      - name: Download C3 real YOLOE-26x 3D re-observations from independently localized frames
+        uses: actions/download-artifact@v4
+        with:
+          name: c3-cross-session-real-YOLOE26x-objects
+          run-id: 41489734662
+          github-token: ${{ github.token }}
+          path: .
+      - name: Run C4 on REAL published C2/C3 artifacts; never mutate saved memory
+        run: |
+          set -euo pipefail
+          test -f results/c2/c2_cross_session_visibility.json
+          test -f results/c2/c2_frame_uuid_evidence.jsonl
+          test -f results/c3/c3_report.json
+          test -f results/c3/c3_independent_object_candidates.jsonl
+          python scripts/c4_multiview_uuid_evidence.py --c2 results/c2 --c3 results/c3 --out results/c4 | tee c4_real.log
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('results/c4/c4_conservative_multiview_report.json').read_text())
+          assert r['real_YOLOE_3D_observations']==69
+          assert r['geometrically_matched_observations']==63
+          assert r['saved_old_uuid_hypotheses']==15
+          assert sum(r['hypothesis_status_counts'].values())==15
+          assert r['no_mutation_of_C1_SQLite'] is True
+          assert r['no_unseen_object_deletion'] is True
+          assert r['physical_reidentification_IDF1'].startswith('NOT_EVALUATED')
+          print('C4_REAL_EVIDENCE_CONFIRMED',r['hypothesis_status_counts'],flush=True)
+          PY
+      - name: Publish automatic factual scientific result ONLY after successful checks
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          x=json.loads(Path('results/c4/c4_conservative_multiview_report.json').read_text())
+          lines=['# C4 — фактические результаты независимого геометрического multi-view аудита',
+          '', '**Статус:** SUCCESS. Основано на оригинальных реальных C2/C3 артефактах TUM desk2.',
+          '', '**Источники:** [C2](https://github.com/KiRiII-C/cv_vlm/actions/runs/41489070935); [C3](https://github.com/KiRiII-C/cv_vlm/actions/runs/41489734662).',
+          '', f'Принятых локализаций: **{x["accepted_localization_frames"]}**;'
+          f' реальных YOLOE 3D-наблюдений: **{x["real_YOLOE_3D_observations"]}**;'
+          f' геометрически сопоставленных: **{x["geometrically_matched_observations"]}**;',
+          f' без геометрического сопоставления: **{x["unmatched_or_ambiguous_observations"]}**.',
+          '', '| Консервативное решение | Количество UUID-гипотез |',
+          '|---|---:|']
+          for key,count in sorted(x['hypothesis_status_counts'].items()):
+              lines.append(f'| `{key}` | {count} |')
+          lines+=['', '| UUID hypothesis | 3D matches | Independent views | Median association score | Center spread (m) | Decision |',
+                  '|---|---:|---:|---:|---:|---|']
+          for v in x['hypotheses']:
+              score='—' if v['median_geometry_score'] is None else f'{v["median_geometry_score"]:.3f}'
+              spread='—' if v['median_center_deviation_m'] is None else f'{v["median_center_deviation_m"]:.3f}'
+              lines.append(f'| `{v["uuid_hypothesis"]}` | {v["C3_matched_real_observations"]} | {v["independent_viewpoints"]} | {score} | {spread} | `{v["status"]}` |')
+          lines+=['','**Не доказывает физическую идентичность.** Эти UUID — гипотезы по измеренной геометрии, без кросс-сессионного GT physical-ID и без appearance embedding. Удаление и перемещение объектов НЕ устанавливались; память C1 не изменялась.',
+                  '','**Следующий этап:** совместная оценка внешнего вида и 3D геометрии с физическим GT изменения/ID; отдельное тестирование влияния ошибочной позы и отсутствующих наблюдений.',
+                  '']
+          out=Path('Docs/experiments/C4_actual_results.md')
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_text('\n'.join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: c4-verified-cross-session-multiview-geometric-consensus
+          path: |
+            results/c4/
+            Docs/experiments/C4_actual_results.md
+            c4_real.log
+          if-no-files-found: error
+          retention-days: 30
+      - name: Store verified report in same research branch
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Docs/experiments/C4_actual_results.md
+          if git diff --cached --quiet; then
+            echo 'C4 verified report unchanged'
+          else
+            git commit -m 'Document C4 verified real desk2 multi-view evidence'
+            git push origin HEAD:experiments/rtabmap-geometry-a0-20261031
+          fi
