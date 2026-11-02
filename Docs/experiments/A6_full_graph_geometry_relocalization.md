@@ -93,6 +93,14 @@
 
 Исправление: `-p "Mem/IncrementalMemory:=\\\"false\\\""`, аналогично `Mem/LocalizationReadOnly` и `RGBD/StartAtOrigin`. Проверена передача аргумента ROS как строкового значения; новый полный запуск [41446136824](https://github.com/KiRiII-C/cv_vlm/actions/runs/41446136824) инициирован. До фактического завершения статус локализации **RUNNING / NOT_VALIDATED**.
 
+### A6-L: проверка событий после устранения ошибок ROS-топиков
+
+[Второй запуск 41446136824](https://github.com/KiRiII-C/cv_vlm/actions/runs/41446136824) завершился **FAIL по критерию отсутствия наблюдаемых событий**. На каждом из 595 кадров был получен `OdomInfoLite`, но локальная одометрия имела `lost=true` на 49 кадрах после искусственного разрыва траектории. Монитор записал 1178 `map→odom` TF, **0** сообщений `Info` и **0** `localization_pose`.
+
+Проверка первоисточника `rtabmap_slam/src/CoreWrapper.cpp` установила ошибку **в нашем мониторе**: ROS2 `create_publisher("info")` и `create_publisher("localization_pose")` публикуют `/info` и `/localization_pose` в корневом namespace (при запуске без отдельного пространства имён). Подписка на `/rtabmap/info` и `/rtabmap/localization_pose` не могла получить эти сообщения. Поэтому **второй тест не доказывает отсутствия локализации**; он доказывает неправильную настройку контроля. В `slam.log` также присутствует сообщение `Localization was good, but waiting for another one to be more accurate`, которое нельзя считать окончательным принятием локализации.
+
+**Исправление:** монитор подписан на реальные корневые темы и повторный полный прогон [41447086277](https://github.com/KiRiII-C/cv_vlm/actions/runs/41447086277) запущен. До проверки артефактов статус `RUNNING / NOT_VALIDATED`. Дополнительное ограничение: журнал содержит `Update map correction based on last localization saved in database`, несмотря на `RGBD/StartAtOrigin=true`; проверка строго **без сохранённого начального состояния** требует дальнейшего исследования внутреннего кода RTAB-Map и альтернативного протокола инициализации.
+
 ## Ограничения и критерии
 
 Итог делить на четыре независимых статуса: `ODOMETRY_COVERAGE`, `GRAPH_POSE_ACCURACY`, `REFERENCE_GEOMETRY_CONSISTENCY`, `RELOCALIZATION_SMOKE_TEST`. Каждый из них требует собственных артефактов и проверок. Нельзя утверждать качество навигации на основании лишь ненулевой TSDF или сообщений RTAB-Map без GT/наблюдений.
