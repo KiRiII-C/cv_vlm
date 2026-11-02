@@ -1,0 +1,62 @@
+name: B4 posthoc bootstrap physical ID association reliability
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/b4-posthoc-bootstrap.yml
+      - scripts/b4_bootstrap_effects.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  paired-scene-bootstrap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: b4-physical-GT-projection-*
+          run-id: 41461111614
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: .
+      - name: Exact 3 x 100 real YOLOE26x records; calculate frame-cluster uncertainty
+        run: |
+          set -euo pipefail
+          python -m pip install 'numpy>=1.24,<3' 'scikit-learn>=1.4'
+          python -m py_compile scripts/b4_bootstrap_effects.py
+          python -u scripts/b4_bootstrap_effects.py \
+            --root results --out results/b4_posthoc --n 750 \
+            2>&1 | tee results_b4_bootstrap.log
+          python - <<'PY'
+          import json,math
+          from pathlib import Path
+          x=json.loads(Path("results/b4_posthoc/b4_bootstrap_report.json").read_text())
+          assert x["GT_used_for_ranking_or_training"] is False
+          for stratum in ("all_same_class","near_0_8m"):
+              rows=x["statistics"][stratum]
+              assert set(rows)=={"ai_002_001","ai_005_001","ai_017_001","pooled"}
+              for scene in ("ai_002_001","ai_005_001","ai_017_001"):
+                  assert rows[scene]["valid"]
+                  assert rows[scene]["pairs"]>100
+                  assert rows[scene]["bootstrap_valid_replicates"]>=700
+                  assert math.isfinite(rows[scene]["delta_roc_auc"])
+              assert rows["pooled"]["valid_bootstrap_runs"]>=700
+          print("B4_BLOCK_BOOTSTRAP_COMPLETE",{
+             k:v["pooled"] for k,v in x["statistics"].items()},flush=True)
+          PY
+      - name: Store numerical confidence intervals
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b4-physical-GT-paired-bootstrap
+          path: |
+            results/b4_posthoc/
+            results_b4_bootstrap.log
+          if-no-files-found: warn
+          retention-days: 30
