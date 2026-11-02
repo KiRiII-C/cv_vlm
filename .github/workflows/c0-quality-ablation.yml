@@ -1,0 +1,61 @@
+name: C0-A real 871 YOLOE confidence gate sensitivity
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - scripts/c0_quality_gate_ablation.py
+      - .github/workflows/c0-quality-ablation.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  quality-ablation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: actions/download-artifact@v4
+        with:
+          name: b5-real-TUM-RTABMap-YOLOE26x-semantic-map
+          run-id: 41467501932
+          github-token: ${{ github.token }}
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: a6-full-tum-graph-geometric-evidence
+          run-id: 41444730029
+          github-token: ${{ github.token }}
+          path: .
+      - name: Run three fixed confidence gates over the same real source
+        run: |
+          set -euo pipefail
+          python -m pip install -e '.[test]'
+          python -u scripts/c0_quality_gate_ablation.py \
+            --observations results/b5/b5_object_observations.jsonl \
+            --poses results/a6/optimized_full_poses.json \
+            --out results/c0_ablation | tee c0_ablation.log
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('results/c0_ablation/c0_quality_ablation.json').read_text())
+          assert d['thresholds_predefined']==[.25,.4,.6]
+          assert d['GT_instance_ID_available'] is False
+          assert all(x['input_observations']==871 for x in d['outcomes'].values())
+          recorded=[d['outcomes'][f'confidence_{c:.2f}']['observations_recorded']
+                    for c in [.25,.4,.6]]
+          assert recorded[0]>=recorded[1]>=recorded[2]
+          print('C0_THREE_REAL_GATE_CONDITIONS',d['outcomes'],flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: c0-real-YOLOE26x-871-confidence-ablation
+          path: |
+            results/c0_ablation/c0_quality_ablation.json
+            c0_ablation.log
+          if-no-files-found: warn
+          retention-days: 30
