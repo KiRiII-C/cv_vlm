@@ -1,0 +1,73 @@
+name: B6 dense actual RGBD YOLOE surface map visualization
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - scripts/b6_render_dense_semantic_map.py
+      - tests/test_b6_dense_semantic_voxels.py
+      - .github/workflows/b6-dense-real-semantic-map.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  b6-density:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: b5-real-TUM-RTABMap-YOLOE26x-semantic-map
+          run-id: 41467501932
+          github-token: ${{ github.token }}
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: a6-full-tum-graph-geometric-evidence
+          run-id: 41444730029
+          github-token: ${{ github.token }}
+          path: .
+      - name: Validate point fusion and class conflict semantics
+        run: |
+          set -euo pipefail
+          python -m pip install 'numpy>=1.24,<3' 'scipy>=1.10,<2' \
+            'matplotlib>=3.7' 'trimesh>=4.0' 'plotly>=5.5' 'pytest>=8'
+          python -m pytest -q tests/test_b6_dense_semantic_voxels.py
+      - name: Rebuild high contrast dense map from measured 295147 points
+        run: |
+          set -euo pipefail
+          python -u scripts/b6_render_dense_semantic_map.py \
+            --cloud results/b5/b5_semantic_pointcloud.npz \
+            --tsdf results/a6/optimized_geometry/tsdf_cloud.ply \
+            --voxel .012 --out results/b6 | tee b6_render.log
+          python - <<'PY'
+          from pathlib import Path
+          import json,numpy as np
+          root=Path("results/b6")
+          d=json.loads((root/"b6_report.json").read_text())
+          assert d["source_measured_YOLO_XYZ"]==295147
+          assert d["source_A6_TSDF_points"]==11624
+          assert d["observed_voxels"]>=50000
+          assert d["no_synthetic_or_interpolated_points"] is True
+          v=np.load(root/"semantic_voxels_measured.npz")
+          assert len(v["xyz"])==len(v["labels"])==len(v["support"])==d["observed_voxels"]
+          assert (root/"dense_semantic_map.png").stat().st_size>100_000
+          assert (root/"object_clouds_by_class.png").stat().st_size>90_000
+          assert (root/"interactive_dense_semantic_map.html").stat().st_size>250_000
+          print("B6_FULL_REAL_MAP_PASS",d,flush=True)
+          PY
+      - name: Save reconstructible density-aware map and all views
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b6-actual-dense-YOLOE26x-RTABMap-semantic-map
+          path: |
+            results/b6/
+            b6_render.log
+          if-no-files-found: warn
+          retention-days: 30
