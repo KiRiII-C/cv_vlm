@@ -60,9 +60,9 @@ def main():
                     "stamp_ns":t.header.stamp.sec*10**9+t.header.stamp.nanosec,
                     "xyz":[float(p.x),float(p.y),float(p.z)],
                     "quaternion":[float(q.x),float(q.y),float(q.z),float(q.w)]})
-    subs=[node.create_subscription(Info,"/rtabmap/info",info,20),
+    subs=[node.create_subscription(Info,"/info",info,20),
           node.create_subscription(PoseWithCovarianceStamped,
-                                   "/rtabmap/localization_pose",pose,20),
+                                   "/localization_pose",pose,20),
           node.create_subscription(TFMessage,"/tf",tf,100)]
     started=time.monotonic()
     try:
