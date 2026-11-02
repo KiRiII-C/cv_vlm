@@ -6,6 +6,9 @@ on:
       - experiments/rtabmap-geometry-a0-20261031
     paths:
       - scripts/rtabmap_tum_a1_v2.py
+      - scripts/rtabmap_graph_export_a3.py
+      - scripts/rtabmap_graph_reconstruct_a3.py
+      - scripts/rtabmap_geometry_a2.py
       - .github/workflows/rtabmap-real-tum-a1.yml
   workflow_dispatch:
 
@@ -34,7 +37,7 @@ jobs:
           ROS_DOMAIN_ID: '61'
         run: |
           set -euo pipefail
-          mkdir -p results/a1
+          mkdir -p results/a1 results/a3
           docker run --rm \
             -e ROS_DOMAIN_ID="$ROS_DOMAIN_ID" \
             -v "$PWD:/workspace" -w /workspace \
@@ -99,6 +102,15 @@ jobs:
                 }
               tail -30 results/a1/replay.log
               sleep 4
+              # Export graph while RTAB-Map is still alive (before shutdown).
+              python3 -u scripts/rtabmap_graph_export_a3.py \
+                --service /rtabmap/get_map_data \
+                --output results/a3/pose_graph_service.json \
+                --timeout 40 --min-nodes 8 \
+                > results/a3/graph_export.log 2>&1 || {
+                  tail -70 results/a3/graph_export.log
+                  echo "A3_GRAPH_EXPORT_FAILED; A1 is evaluated independently"
+                }
             ' 2>&1 | tee results/a1/container.log
 
       - name: Validate recorded odometry and actual RTAB-Map database
@@ -157,6 +169,32 @@ jobs:
                 --reconstruct --voxel 0.06
             '
 
+      - name: A3 compare optimized RTAB-Map graph with raw graph and rebuild maps
+        # Failure means A3 is not accepted, regardless of the A1/A2 result.
+        run: |
+          set -euo pipefail
+          test -s results/a3/pose_graph_service.json
+          docker run --rm \
+            -e OMP_NUM_THREADS=2 -e OPENBLAS_NUM_THREADS=2 \
+            -v "$PWD:/workspace" -w /workspace \
+            cv-vlm:jazzy-a1 bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              python3 -m py_compile scripts/rtabmap_graph_export_a3.py scripts/rtabmap_graph_reconstruct_a3.py
+              /opt/semantic-venv/bin/pip install --no-cache-dir "open3d==0.19.0" \
+                > results/a3/open3d_install.log 2>&1 || {
+                  tail -60 results/a3/open3d_install.log
+                  exit 1
+                }
+              python3 -u scripts/rtabmap_graph_reconstruct_a3.py \
+                --graph results/a3/pose_graph_service.json \
+                --database results/a1/rtabmap.db \
+                --published results/a1/rtabmap_real_tum.publish.json \
+                --data data/tum --output results/a3 \
+                --min-nodes 12 --evaluate-gt --reconstruct \
+                --voxel 0.06
+            ' 2>&1 | tee results/a3/a3_container.log
+
       - name: Export real experimental evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -165,6 +203,7 @@ jobs:
           path: |
             results/a1/
             results/a2/
+            results/a3/
             docker_a1_build.log
           if-no-files-found: warn
           retention-days: 30
