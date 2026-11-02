@@ -20,41 +20,91 @@ import numpy as np
 from semantic_map.tum_yolo_pipeline import download_scene, parse
 
 
+def associate_full_rgb_depth(rgb, depth, tolerance_s=.03):
+    """Maximum-cardinality, minimum-total-time-error monotonic RGB-D matching.
+
+    Each depth measurement is used at most once. Unlike nearest-neighbour
+    greedy pairing, an available alternative depth frame is considered
+    before rejecting an RGB frame. This is exact dynamic programming over
+    original ordered timestamp lists (no subsampling of either stream).
+    """
+    n=len(rgb);m=len(depth)
+    if n==0 or m==0:
+        raise ValueError("RGB and Depth must both contain frames")
+    rt=np.asarray([p[0] for p in rgb],dtype=np.float64)
+    dt=np.asarray([p[0] for p in depth],dtype=np.float64)
+    if np.any(np.diff(rt)<=0) or np.any(np.diff(dt)<=0):
+        raise ValueError("Source timestamps must be strictly increasing")
+    counts=np.zeros((n+1,m+1),dtype=np.int32)
+    costs=np.zeros((n+1,m+1),dtype=np.float64)
+    steps=np.zeros((n+1,m+1),dtype=np.uint8)
+    # 1 = skip RGB, 2 = skip depth, 3 = match.
+    for i in range(1,n+1):
+        for j in range(1,m+1):
+            cnt=int(counts[i-1,j])
+            cost=float(costs[i-1,j])
+            step=1
+            cc=int(counts[i,j-1]);ec=float(costs[i,j-1])
+            if cc>cnt or (cc==cnt and ec<cost-1e-12):
+                cnt=cc;cost=ec;step=2
+            diff=abs(float(rt[i-1]-dt[j-1]))
+            if diff<=tolerance_s+1e-12:
+                cc=int(counts[i-1,j-1])+1
+                ec=float(costs[i-1,j-1])+diff
+                if cc>cnt or (cc==cnt and ec<cost-1e-12):
+                    cnt=cc;cost=ec;step=3
+            counts[i,j]=cnt
+            costs[i,j]=cost
+            steps[i,j]=step
+    pairs=[]
+    i=n;j=m
+    while i>0 and j>0:
+        step=int(steps[i,j])
+        if step==3:
+            pairs.append((i-1,j-1))
+            i-=1;j-=1
+        elif step==1:
+            i-=1
+        elif step==2:
+            j-=1
+        else:
+            raise RuntimeError("Broken DP pairing traceback")
+    pairs.reverse()
+    if len(pairs)!=int(counts[n,m]):
+        raise AssertionError("DP pairing cardinality mismatch")
+    if len(set(a for a,_ in pairs))!=len(pairs) or len(set(b for _,b in pairs))!=len(pairs):
+        raise AssertionError("RGB-D frame reused")
+    return pairs, float(costs[n,m])
+
+
 def full_rgbd_pairs(folder: Path):
     root=download_scene(folder)
     rgb=parse(root/"rgb.txt")
     depth=parse(root/"depth.txt")
-    dts=[d[0] for d in depth]
     if not rgb or not depth:
         raise RuntimeError("Empty RGB/depth dataset source")
-    pairs=[]
-    missing=0
-    reused=0
-    used=set()
-    for t,paths in rgb:
-        j=bisect_left(dts,t)
-        nearby=[k for k in (j-1,j) if 0<=k<len(depth) and abs(depth[k][0]-t)<=.03]
-        if not nearby:
-            missing+=1
-            continue
-        k=min(nearby,key=lambda v:abs(dts[v]-t))
-        if k in used:
-            reused+=1
-            continue
-        used.add(k)
-        pairs.append((float(t),root/paths[0],root/depth[k][1][0],float(dts[k])))
+    indices,total_diff=associate_full_rgb_depth(rgb,depth,tolerance_s=.03)
+    pairs=[(float(rgb[i][0]),root/rgb[i][1][0],
+            root/depth[j][1][0],float(depth[j][0])) for i,j in indices]
+    dts=[float(d[0]) for d in depth]
+    without_nearby=sum(
+        not any(0<=k<len(depth) and abs(dts[k]-t)<=.03
+                for k in (bisect_left(dts,t)-1,bisect_left(dts,t)))
+        for t,_ in rgb)
     if len(pairs)<30:
-        raise RuntimeError("Too few RGB-D pairs")
-    if any(pairs[i][0]>=pairs[i+1][0] for i in range(len(pairs)-1)):
-        raise ValueError("Dataset RGB stamps are nonmonotonic")
-    return pairs, {
+        raise RuntimeError("Too few paired observations for real TUM test")
+    assert len(pairs)==len(indices)
+    assert len(pairs)<=min(len(rgb),len(depth))
+    return pairs,{
         "source_rgb_frames":len(rgb),
         "source_depth_frames":len(depth),
         "synchronized_rgbd_pairs":len(pairs),
-        "rgb_without_nearby_depth":missing,
-        "rgb_depth_reuse_blocked":reused,
-        "unpaired_depth":len(depth)-len(used),
+        "rgb_without_nearby_depth":without_nearby,
+        "rgb_excluded_after_one_to_one_matching":len(rgb)-without_nearby-len(pairs),
+        "unpaired_depth":len(depth)-len(pairs),
         "pairing_tolerance_s":.03,
+        "matching_method":"monotonic_global_maximum_cardinality_minimum_total_timestamp_error",
+        "total_rgb_depth_abs_dt_s":total_diff,
         "all_paired_frames_selected":True,
         "frame_stride":1,
         "max_frames":None,
