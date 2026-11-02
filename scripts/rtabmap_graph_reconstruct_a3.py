@@ -158,6 +158,42 @@ def graph_topology(opt_graph, matches):
     }
 
 
+
+
+def surface_disagreement(raw_ply, optimized_ply, iterations=12):
+    """Rigid SE3 surface disagreement. This is NOT independent map accuracy."""
+    import open3d as o3d
+    from scipy.spatial import cKDTree
+    raw=np.asarray(o3d.io.read_point_cloud(str(raw_ply)).points,dtype=float)
+    opt=np.asarray(o3d.io.read_point_cloud(str(optimized_ply)).points,dtype=float)
+    if len(raw)<100 or len(opt)<100:
+        raise RuntimeError("Cannot compare small or empty reconstructed surfaces")
+    R=np.eye(3);t=np.zeros(3)
+    reference=cKDTree(opt)
+    for _ in range(iterations):
+        transformed=raw@R.T+t
+        dist,idx=reference.query(transformed)
+        keep=dist<=np.quantile(dist,.85)
+        a=transformed[keep];b=opt[idx[keep]]
+        ma=a.mean(axis=0);mb=b.mean(axis=0)
+        U,_,Vt=np.linalg.svd((a-ma).T@(b-mb))
+        step=Vt.T@np.diag([1.,1.,np.sign(np.linalg.det(Vt.T@U.T))])@U.T
+        dt=mb-ma@step.T
+        R=step@R;t=step@t+dt
+    aligned=raw@R.T+t
+    d_raw=reference.query(aligned)[0]
+    d_opt=cKDTree(aligned).query(opt)[0]
+    return {
+        "interpretation":"SURFACE_DISAGREEMENT_NOT_GEOMETRIC_ACCURACY",
+        "SE3_aligned":True,
+        "raw_points":int(len(raw)),
+        "optimized_points":int(len(opt)),
+        "symmetric_mean_nn_m":float((d_raw.mean()+d_opt.mean())/2),
+        "symmetric_rms_nn_m":float(np.sqrt((np.mean(d_raw*d_raw)+np.mean(d_opt*d_opt))/2)),
+        "raw_to_optimized_median_nn_m":float(np.median(d_raw)),
+        "raw_to_optimized_p95_nn_m":float(np.percentile(d_raw,95)),
+    }
+
 def run(args):
     graph=json.loads(args.graph.read_text())
     published=json.loads(args.published.read_text())
@@ -223,6 +259,9 @@ def run(args):
                 "occupied_3d_voxels":result["occupied_3d_voxels"],
                 "navigation_ready":result["occupancy_2d"]["nav_ready"],
             }
+        report["raw_vs_opt_surface_disagreement"]=surface_disagreement(
+            args.output/"raw_geometry"/"tsdf_cloud.ply",
+            args.output/"optimized_geometry"/"tsdf_cloud.ply")
     output=args.output/"a3_report.json"
     output.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"\n")
     print("A3_RESULT",json.dumps(report,ensure_ascii=False),flush=True)
