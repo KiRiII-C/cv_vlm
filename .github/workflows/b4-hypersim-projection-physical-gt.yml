@@ -1,0 +1,67 @@
+name: B4 real YOLOE26x physical GT 3D-surface correspondence 300 frames
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/b4-hypersim-projection-physical-gt.yml
+      - scripts/b4_hypersim_physical_gt_projection.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-100-frames-per-scene:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 160
+    strategy:
+      fail-fast: false
+      matrix:
+        scene: [ai_002_001, ai_005_001, ai_017_001]
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install actual YOLOE26x and Hypersim source readers
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgl1 libgomp1
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test,benchmark]' 'ultralytics>=8.4.12' h5py requests pillow
+          python -m py_compile scripts/b4_hypersim_physical_gt_projection.py
+      - name: All consecutive 100 frames with genuine YOLOE26x masks and physical GT scoring
+        run: |
+          set -euo pipefail
+          python -u scripts/b4_hypersim_physical_gt_projection.py \
+            --scene ${{ matrix.scene }} \
+            --out results/b4_${{ matrix.scene }} 2>&1 | tee b4_${{ matrix.scene }}.log
+          python - <<'PY'
+          import json,glob
+          from pathlib import Path
+          paths=list(Path("results").glob("b4_*/b4_pairwise_report.json"))
+          assert len(paths)==1,paths
+          report=json.loads(paths[0].read_text())
+          assert report["counts"]["total_keyframes"]==100
+          assert report["counts"]["mask_observations"]>0
+          assert report["source_gt_instance_ids_used_only_for_scoring"] is True
+          assert report["RTABMAP_NOT_TESTED"] is True
+          assert len(report["per_frame"])==100
+          assert [p["frame"] for p in report["per_frame"]]==list(range(100))
+          print("B4_FULL_PHYSICAL_GT_PAIRWISE_RESULT",report["scene"],
+               report["counts"],report["metrics"],flush=True)
+          PY
+      - name: Store full 100-frame physical GT experiment
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b4-physical-GT-projection-${{ matrix.scene }}
+          path: |
+            results/b4_*/
+            b4_*.log
+          if-no-files-found: warn
+          retention-days: 30
