@@ -22,6 +22,7 @@
 | A3 | Оптимизация графа RTAB-Map против исходного | 3 REAL RUNS PASS — при loop closure ATE улучшалась на 16% и 57%, без closure улучшения нет; VO нестабильна | [A3](experiments/A3_optimized_graph.md) |
 | A3-R | Повторяемость A3 и влияние замыкания циклов | 3 RUNS COMPLETE / FRONTEND REPRODUCIBILITY LIMITED / 3D ACCURACY NOT_VALIDATED | [Отчёт](experiments/A3_repeatability.md) |
 | A4 | Полный TUM RGB-D без прореживания: OdomInfoLite и подтверждение каждого кадра | PASS: 595/595 уникальных RGB-D пар, RTAB-Map lost=0, технически валидных 594, ATE 6.75 см; 18 RGB без уникальной пары | [A4](experiments/A4_full_tum_odometry.md) |
+| A5 | Информативность встроенной RTAB-Map OdomInfo: полный TUM, ATE/RPE и ошибки при высоком inliers | RUNNING — метрики GT только после SLAM, все синхронизированные кадры | [A5](experiments/A5_odominfo_predictiveness.md) |
 
 
 **Полнота данных:** начиная с A4 все новые эксперименты должны обрабатывать все доступные синхронизированные RGB-D-пары выбранного датасета; лимиты вида 150 кадров и каждый третий кадр запрещены. Исторические A1–A3 не соответствовали этому требованию и не являются полными прогонами.
