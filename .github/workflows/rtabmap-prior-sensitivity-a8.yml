@@ -1,0 +1,228 @@
+name: A8 full-TUM relocalization prior sensitivity (three arms)
+
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/rtabmap-prior-sensitivity-a8.yml
+      - scripts/a8_run_prior_arm.sh
+      - scripts/evaluate_prior_sensitivity_a8.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prior-sensitivity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout isolated experimental branch
+        uses: actions/checkout@v4
+
+      - name: Build reproducible ROS 2 Jazzy RTAB-Map Docker
+        run: |
+          set -euo pipefail
+          docker build -t cv-vlm:jazzy-a8 . > docker_a8_build.log 2>&1 || {
+            tail -100 docker_a8_build.log
+            exit 1
+          }
+          tail -12 docker_a8_build.log
+
+      - name: Replay every TUM RGB-D frame and record RTAB-Map OdomInfo
+        env:
+          ROS_DOMAIN_ID: '64'
+        run: |
+          set -euo pipefail
+          mkdir -p results/a8_map
+          docker run --rm --env ROS_DOMAIN_ID="$ROS_DOMAIN_ID" \
+            -v "$PWD:/workspace" --workdir /workspace \
+            cv-vlm:jazzy-a8 bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+              export ROS_LOCALHOST_ONLY=1
+              export OMP_NUM_THREADS=2
+              export OPENBLAS_NUM_THREADS=2
+              export PYTHONUNBUFFERED=1
+              python3 -m py_compile scripts/tum_full_replay_a4.py
+              python3 scripts/tum_full_replay_a4.py --manifest-only \
+                --data data/tum --output results/a8_map/input_manifest.json
+              ros2 run rtabmap_odom rgbd_odometry --ros-args \
+                -p frame_id:=camera_color_optical_frame \
+                -p subscribe_rgbd:=true \
+                -p publish_tf:=true \
+                -p always_process_most_recent_frame:=false \
+                -p output_queue_size:=10 \
+                -r rgbd_image:=/camera/rgbd_image \
+                -r odom:=/odom \
+                -r odom_info_lite:=/odom_info_lite \
+                > results/a8_map/odom.log 2>&1 &
+              ODOM_PID=$!
+              ros2 run rtabmap_slam rtabmap --ros-args \
+                -p frame_id:=camera_color_optical_frame \
+                -p subscribe_rgbd:=true \
+                -p subscribe_depth:=true \
+                -p subscribe_odom_info:=false \
+                -p publish_tf:=false \
+                -p database_path:=/workspace/results/a8_map/rtabmap.db \
+                -r rgbd_image:=/camera/rgbd_image \
+                -r odom:=/odom > results/a8_map/slam.log 2>&1 &
+              SLAM_PID=$!
+              cleanup() {
+                kill -INT "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+                sleep 4
+                kill -TERM "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+                wait "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+              }
+              trap cleanup EXIT
+              sleep 6
+              python3 -u scripts/tum_full_replay_a4.py \
+                --data data/tum --output results/a8_map/full_sequence.json \
+                --max-rate-hz 15 --ack-timeout-s 5 \
+                > results/a8_map/replay.log 2>&1 || {
+                  tail -65 results/a8_map/replay.log
+                  tail -65 results/a8_map/odom.log
+                  tail -35 results/a8_map/slam.log
+                  exit 1
+                }
+              tail -30 results/a8_map/replay.log
+              sleep 4
+              python3 -u scripts/rtabmap_graph_export_a3.py \
+                --service /rtabmap/get_map_data \
+                --output results/a8_map/pose_graph_service.json \
+                --timeout 60 --min-nodes 8 \
+                > results/a8_map/graph_export.log 2>&1 || {
+                  tail -30 results/a8_map/graph_export.log
+                  echo "Graph export unavailable; no claim of loop closure quality"
+                }
+            ' 2>&1 | tee results/a8_map/container.log
+
+      - name: Validate complete frame coverage and diagnostics
+        run: |
+          set -euo pipefail
+          sudo chmod -R a+rwX results/a8_map
+          python3 - <<'PY'
+          import json,sqlite3
+          from pathlib import Path
+          root=Path("results/a8_map")
+          manifest=json.loads((root/"input_manifest.json").read_text())
+          report=json.loads((root/"full_sequence.json").read_text())
+          assert manifest["frame_stride"]==1 and manifest["max_frames"] is None
+          assert manifest["all_paired_frames_selected"] is True
+          assert report["published_frames"]==manifest["synchronized_rgbd_pairs"]
+          assert report["odominfo_ack_frames"]==report["published_frames"]
+          assert report["source_rgb_frames"]>=report["published_frames"]>150
+          assert report["GT_used_as_input"] is False
+          assert report["odominfo_lost_true_count"]+report["odominfo_lost_false_count"]==report["odominfo_ack_frames"]
+          database=root/"rtabmap.db"
+          assert database.exists() and database.stat().st_size>4096
+          with sqlite3.connect(database) as conn:
+              n=conn.execute("SELECT COUNT(*) FROM Node").fetchone()[0]
+              assert n>=2
+          report["rtabmap_database_nodes"]=n
+          report["experiment_scope"]="ALL_AVAILABLE_RGB_DEPTH_PAIRS_NO_SUBSAMPLING"
+          (root/"full_sequence.json").write_text(json.dumps(report,indent=2)+"\n")
+          print("A4_COMPLETE_FULL_DATASET",{
+            "pairs":report["published_frames"],
+            "odominfo_ack":report["odominfo_ack_frames"],
+            "rtabmap_lost":report["odominfo_lost_true_count"],
+            "rtabmap_success":report["odominfo_lost_false_count"],
+            "technical_valid":report["numerically_valid_odom"],
+            "db_nodes":n})
+          PY
+
+      - name: A8 download independent complete query and create verified manifest
+        run: |
+          set -euo pipefail
+          mkdir -p results/a8
+          docker run --rm \
+            -v "$PWD:/workspace" --workdir /workspace \
+            cv-vlm:jazzy-a8 bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              python3 -m py_compile scripts/relocalize_independent_tum_a7.py \
+                scripts/evaluate_prior_sensitivity_a8.py
+              python3 -u scripts/relocalize_independent_tum_a7.py \
+                --data data/tum_a7 --output results/a8/manifest_probe.json \
+                --manifest-only
+              cp results/a8/independent_query_manifest.json results/a8/query_manifest.json
+            '
+          sudo chmod -R a+rwX results/a8 data/tum_a7
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("results/a8/query_manifest.json").read_text())
+          assert d["source_dataset"]=="TUM_freiburg1_desk2_INDEPENDENT_QUERY"
+          assert d["synchronized_rgbd_pairs"]>=600
+          assert d["frame_stride"]==1 and d["max_frames"] is None
+          print("A8_QUERY_MANIFEST",d,flush=True)
+          PY
+
+      - name: A8 three full-length independently restarted ROS sessions
+        run: |
+          set -euo pipefail
+          for mode in first_node saved_last wrong_8m; do
+            echo "A8_ARM_START ${mode}"
+            docker run --rm \
+              -e ROS_DOMAIN_ID=78 \
+              -e A8_MODE="$mode" \
+              -v "$PWD:/workspace" --workdir /workspace \
+              cv-vlm:jazzy-a8 bash -lc '
+                set -eo pipefail
+                source /opt/ros/jazzy/setup.bash
+                bash scripts/a8_run_prior_arm.sh
+              ' > "results/a8/${mode}_container.log" 2>&1 || {
+                tail -90 "results/a8/${mode}_container.log"
+                tail -70 "results/a8/${mode}/slam.log" || true
+                exit 1
+              }
+            tail -9 "results/a8/${mode}_container.log"
+            sleep 4
+          done
+
+      - name: A8 evaluate coverage, prior injection and accepted old-map events
+        run: |
+          set -euo pipefail
+          sudo chmod -R a+rwX results/a8_map results/a8
+          docker run --rm \
+            -v "$PWD:/workspace" --workdir /workspace \
+            cv-vlm:jazzy-a8 bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              python3 -u scripts/evaluate_prior_sensitivity_a8.py \
+                --root results/a8 --map-dir results/a8_map
+            ' 2>&1 | tee results/a8/a8_evaluator.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("results/a8/a8_prior_sensitivity_report.json")
+          d=json.loads(p.read_text())
+          assert d["all_rgbd_frames_used"] is True
+          assert d["map_frames"]==595
+          assert d["query_frames_each"]>=600
+          assert set(d["cases"])=={"first_node","saved_last","wrong_8m"}
+          for mode,c in d["cases"].items():
+              assert c["query_frames"]==d["query_frames_each"]
+              assert c["processed_confirmations"]==c["query_frames"]
+              assert c["accepted_event_count_unique"]==0 or c["first_accepted_frame"] is not None
+          print("A8_CONTROLLED_EXPERIMENT_COMPLETE",{
+            k:{"first_hit":v["first_accepted_frame"],"events":v["accepted_event_count_unique"],
+               "status":v["status"]} for k,v in d["cases"].items()
+          })
+          PY
+
+      - name: Upload FULL dataset evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a8-TUM-independent-prior-sensitivity
+          path: |
+            results/a8_map/
+            results/a8/
+            data/tum_a7/rgbd_dataset_freiburg1_desk2/rgb.txt
+            data/tum_a7/rgbd_dataset_freiburg1_desk2/depth.txt
+            docker_a8_build.log
+          if-no-files-found: warn
+          retention-days: 30
