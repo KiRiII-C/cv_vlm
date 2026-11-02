@@ -1,0 +1,123 @@
+name: C3 independent TUM desk2 YOLOE26x candidate re-observation
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/c3-cross-session-yoloe-reobservation.yml
+      - scripts/c3_independent_yoloe_object_reobservations.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  independent-semantic-reobservation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 160
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: actions/download-artifact@v4
+        with:
+          name: c1-real-dense-YOLOE26x-object-hypothesis-surfaces
+          run-id: 41486402404
+          github-token: ${{ github.token }}
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: a8-TUM-independent-prior-sensitivity
+          run-id: 41451763476
+          github-token: ${{ github.token }}
+          path: .
+      - name: Download ALL REAL independent TUM desk2 RGB and depth frames (639 pairs)
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import urllib.request, tarfile, shutil, time
+          folder="rgbd_dataset_freiburg1_desk2"
+          dest=Path("data/tum_a7")/folder
+          dest.mkdir(parents=True,exist_ok=True)
+          tarpath=Path("data/tum_a7/desk2.tgz")
+          for host in ("https://vision.in.tum.de/rgbd/dataset/freiburg1",
+                       "https://webshare.cvg.cit.tum.de/rgbd/dataset/freiburg1"):
+              try:
+                  url=f"{host}/{folder}.tgz"
+                  with urllib.request.urlopen(
+                       urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"}),
+                       timeout=180) as stream,tarpath.open("wb") as out:
+                      shutil.copyfileobj(stream,out)
+                  assert tarpath.stat().st_size>20000000
+                  break
+              except Exception as exc:
+                  print("TUM_DOWNLOAD_FAILURE",url,repr(exc),flush=True)
+                  tarpath.unlink(missing_ok=True)
+                  time.sleep(3)
+          if not tarpath.is_file():raise RuntimeError("Official TUM desk2 archive unavailable")
+          with tarfile.open(tarpath,"r:gz") as tar:
+              for member in tar:
+                  parts=Path(member.name).parts
+                  if member.isfile() and len(parts)>=2 and parts[0]==folder and (
+                      member.name in (folder+"/rgb.txt",folder+"/depth.txt") or
+                      (member.name.startswith(folder+"/depth/") or
+                       member.name.startswith(folder+"/rgb/"))):
+                      target=Path("data/tum_a7")/member.name
+                      target.parent.mkdir(parents=True,exist_ok=True)
+                      with tar.extractfile(member) as src,target.open("wb") as out:
+                          shutil.copyfileobj(src,out)
+          r=(dest/"rgb.txt").read_text().splitlines()
+          d=(dest/"depth.txt").read_text().splitlines()
+          rgb=[x for x in r if x.strip() and not x.startswith("#")]
+          depth=[x for x in d if x.strip() and not x.startswith("#")]
+          assert len(rgb)==640 and len(depth)==639,(len(rgb),len(depth))
+          assert len(list((dest/"depth").glob("*.png")))==639
+          assert len(list((dest/"rgb").glob("*.png")))==640
+          print("C2_INDEPENDENT_REAL_DEPTH_READY",len(rgb),len(depth),flush=True)
+          PY
+      - name: Install pretrained YOLOE-26x CPU runtime
+        run: |
+          set -euo pipefail
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test]' 'ultralytics>=8.4.12'
+          python -m py_compile scripts/c3_independent_yoloe_object_reobservations.py
+      - name: REAL YOLOE26x inference on every accepted A8 map pose of full desk2, compare to saved C1 hypotheses
+        run: |
+          set -euo pipefail
+          export OMP_NUM_THREADS=3 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=3
+          PYTHONPATH=src:scripts python -u scripts/c3_independent_yoloe_object_reobservations.py \
+            --root data/tum_a7/rgbd_dataset_freiburg1_desk2 \
+            --a8 results/a8/saved_last \
+            --c1 results/c1 \
+            --out results/c3 \
+            --weights yoloe-26x-seg.pt \
+            2>&1 | tee c3_full_real.log
+          python - <<'PY'
+          from pathlib import Path
+          import json,numpy as np
+          r=json.loads(Path("results/c3/c3_report.json").read_text())
+          assert r["all_independent_RGBD_source_frames_accounted"]==639
+          assert r["actual_YOLOE26x_inference_frames"]>=20
+          assert r["old_C1_UUID_hypotheses"]==15
+          assert r["counts"]["valid_new_3D_observations"]>0
+          assert r["no_new_physical_UUID_asserted"] is True
+          assert r["no_existing_C1_SQLite_changes"] is True
+          assert r["physical_ID_accuracy"].startswith("NOT_EVALUATED")
+          records=Path("results/c3/c3_independent_object_candidates.jsonl").read_text().splitlines()
+          assert len(records)==r["counts"]["valid_new_3D_observations"]
+          arr=np.load("results/c3/c3_independent_3d_masks.npz")
+          assert len(arr["xyz"])==len(arr["labels"])
+          print("C3_REAL_YOLOE_CROSS_SESSION_PASS",{
+             "semantic_observations":len(records),
+             "old_C1_hypotheses_with_matches":r["old_C1_hypotheses_with_any_candidate_match"],
+             "statuses":r["counts"]},flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: c3-cross-session-real-YOLOE26x-objects
+          path: |
+            results/c3/
+            c3_full_real.log
+          if-no-files-found: warn
+          retention-days: 30
