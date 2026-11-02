@@ -5,6 +5,11 @@ on:
     paths:
       - 'research/fundamental/aggregate_full_suite.py'
       - '.github/workflows/fundamental-unified-analysis.yml'
+  pull_request:
+    branches: ['feature/semantic-memory-mapping']
+    paths:
+      - 'research/fundamental/aggregate_full_suite.py'
+      - '.github/workflows/fundamental-unified-analysis.yml'
   workflow_dispatch:
 permissions:
   contents: write
