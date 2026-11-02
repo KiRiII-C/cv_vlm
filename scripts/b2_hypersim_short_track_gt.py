@@ -106,6 +106,8 @@ def main():
     results={}
     for scene in SCENES:
         cache=args.root/f"full_sequence_{scene}"/"raw_observations_and_GT_scoring.json.gz"
+        if not cache.exists():
+            cache=args.root/"results"/f"full_sequence_{scene}"/"raw_observations_and_GT_scoring.json.gz"
         if not cache.exists():raise RuntimeError("Missing real full YOLOE cache: "+str(cache))
         results[scene]={method:evaluate_scene(cache,method) for method in ("3d_only","3d_and_appearance")}
     totals={}
