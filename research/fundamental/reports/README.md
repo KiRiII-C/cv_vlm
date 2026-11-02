@@ -21,8 +21,10 @@
 | [EXP-20261102-02](EXP-20261102-02.md) | Hard-negative проверка локальных 2D/3D-дескрипторов | **PASS**: TUM+Bonn; [CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/41359330363) |
 | [EXP-20261102-03](EXP-20261102-03.md) | Проверка переноса 5 обученных RGB-D-энкодеров TUM → Bonn | **PASS**: обучение + independent evaluation; [CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/41359705084) |
 | [EXP-20261102-04](EXP-20261102-04-results.md) | 48 эпох, 6 RGB-D-архитектур × 2 seed, расширенные ViT и проверка Bonn | **PASS** 12/12; [CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/41360620282) |
-| [EXP-20261102-05](EXP-20261102-05.md) | Симметричные RGB-hard/geometry-hard/local-random оценки на трёх реальных последовательностях | CI в процессе, исходные гипотезы зарегистрированы |
-| [EXP-20261102-06](EXP-20261102-06.md) | Физическая временная память: свежесть vs многовидовое заполнение | CI в процессе, протокол зарегистрирован |
+| [EXP-20261102-05](EXP-20261102-05.md) | Симметричные RGB-hard/geometry-hard/local-random оценки на трёх реальных последовательностях | **PASS** 3/3 реальные записи; [CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/41391555473) |
+| [EXP-20261102-06](EXP-20261102-06.md) | Физическая временная память: свежесть vs многовидовое заполнение | **PASS** 3/3 реальные записи; [CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/41391709822) |
+| [EXP-20261102-07](EXP-20261102-07.md) | Один или два реальных TUM-прохода при идентичном числе шагов, сравнение переноса MLP / ViT на Bonn | Код/протокол в ветке; [CI](https://github.com/KiRiII-C/cv_vlm/actions/runs/41392421117) в очереди |
+| [DERIVATION-INVARIANCE-TASK](DERIVATION-INVARIANCE-TASK.md) | Формальное условие, когда инвариантность признака теряет информацию для задачи | Доказано из определения, не новая теорема |
 | [THEORY_NOTES](THEORY_NOTES.md) | Математические гипотезы, наблюдаемость и ограничения новизны | Гипотезы, не подтверждённые эксперименты |
 
 ## Ранее выполненные работы
