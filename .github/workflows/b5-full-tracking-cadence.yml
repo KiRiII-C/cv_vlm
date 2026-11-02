@@ -1,0 +1,62 @@
+name: B5 full 300 physical ID tracking cadence assessment
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/b5-full-tracking-cadence.yml
+      - scripts/b5_tracking_cadence_physical_gt.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  full-physical-id:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: full-yoloe26x-100frames-*
+          run-id: 40820074555
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: results/b5_inputs
+      - name: Evaluate all GT frames and 4 detector cadences on frozen real YOLOE-26x masks
+        run: |
+          set -euo pipefail
+          python -m pip install -e '.[test]'
+          python -m py_compile scripts/b5_tracking_cadence_physical_gt.py
+          python -u scripts/b5_tracking_cadence_physical_gt.py \
+            --root results/b5_inputs --out results/b5_tracking \
+            | tee b5_track_cadence.log
+          python - <<'PY'
+          import json,math
+          from pathlib import Path
+          d=json.loads(Path("results/b5_tracking/b5_full_gt_tracking_cadence.json").read_text())
+          assert d["full_frames_accounted"]==300
+          assert d["GT_misses_counted_on_ALL_100_frames"] is True
+          for scene,v in d["per_scene"].items():
+              for stride in ["1","3","5","10"]:
+                  for method,x in v[stride].items():
+                      assert x["frames"]==100
+                      assert x["GT_total_visible_instance_frames"]>0
+                      assert 0<=x["scores"]["IDF1"]<=1
+          for stride,v in d["pooled"].items():
+              for method,x in v.items():
+                  assert math.isfinite(x["pooled_IDF1"])
+          print("B5_ALL_GT_CADENCE_PASS",d["pooled"],flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: b5-physical-GT-short-track-300-cadence
+          path: |
+            results/b5_tracking/
+            b5_track_cadence.log
+          if-no-files-found: warn
+          retention-days: 30
