@@ -111,5 +111,7 @@ jobs:
             echo 'C4 verified report unchanged'
           else
             git commit -m 'Document C4 verified real desk2 multi-view evidence'
+            git fetch origin experiments/rtabmap-geometry-a0-20261031
+            git rebase origin/experiments/rtabmap-geometry-a0-20261031
             git push origin HEAD:experiments/rtabmap-geometry-a0-20261031
           fi
