@@ -1,0 +1,145 @@
+name: A4 FULL TUM RGB-D RTAB-Map OdomInfo diagnostics
+
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - scripts/tum_full_replay_a4.py
+      - .github/workflows/rtabmap-full-tum-a4.yml
+      - tests/test_tum_full_replay_a4.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-sequence-tum:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout isolated experimental branch
+        uses: actions/checkout@v4
+
+      - name: Build reproducible ROS 2 Jazzy RTAB-Map Docker
+        run: |
+          set -euo pipefail
+          docker build -t cv-vlm:jazzy-a4 . > docker_a4_build.log 2>&1 || {
+            tail -100 docker_a4_build.log
+            exit 1
+          }
+          tail -12 docker_a4_build.log
+
+      - name: Replay every TUM RGB-D frame and record RTAB-Map OdomInfo
+        env:
+          ROS_DOMAIN_ID: '64'
+        run: |
+          set -euo pipefail
+          mkdir -p results/a4
+          docker run --rm --env ROS_DOMAIN_ID="$ROS_DOMAIN_ID" \
+            -v "$PWD:/workspace" --workdir /workspace \
+            cv-vlm:jazzy-a4 bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+              export ROS_LOCALHOST_ONLY=1
+              export OMP_NUM_THREADS=2
+              export OPENBLAS_NUM_THREADS=2
+              export PYTHONUNBUFFERED=1
+              python3 -m py_compile scripts/tum_full_replay_a4.py
+              python3 scripts/tum_full_replay_a4.py --manifest-only \
+                --data data/tum --output results/a4/input_manifest.json
+              ros2 run rtabmap_odom rgbd_odometry --ros-args \
+                -p frame_id:=camera_color_optical_frame \
+                -p subscribe_rgbd:=true \
+                -p publish_tf:=true \
+                -p always_process_most_recent_frame:=false \
+                -p output_queue_size:=10 \
+                -r rgbd_image:=/camera/rgbd_image \
+                -r odom:=/odom \
+                -r odom_info_lite:=/odom_info_lite \
+                > results/a4/odom.log 2>&1 &
+              ODOM_PID=$!
+              ros2 run rtabmap_slam rtabmap --ros-args \
+                -p frame_id:=camera_color_optical_frame \
+                -p subscribe_rgbd:=true \
+                -p subscribe_depth:=true \
+                -p subscribe_odom_info:=false \
+                -p publish_tf:=false \
+                -p database_path:=/workspace/results/a4/rtabmap.db \
+                -r rgbd_image:=/camera/rgbd_image \
+                -r odom:=/odom > results/a4/slam.log 2>&1 &
+              SLAM_PID=$!
+              cleanup() {
+                kill -INT "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+                sleep 4
+                kill -TERM "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+                wait "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+              }
+              trap cleanup EXIT
+              sleep 6
+              python3 -u scripts/tum_full_replay_a4.py \
+                --data data/tum --output results/a4/full_sequence.json \
+                --max-rate-hz 15 --ack-timeout-s 5 \
+                > results/a4/replay.log 2>&1 || {
+                  tail -65 results/a4/replay.log
+                  tail -65 results/a4/odom.log
+                  tail -35 results/a4/slam.log
+                  exit 1
+                }
+              tail -30 results/a4/replay.log
+              sleep 4
+              python3 -u scripts/rtabmap_graph_export_a3.py \
+                --service /rtabmap/get_map_data \
+                --output results/a4/pose_graph_service.json \
+                --timeout 60 --min-nodes 8 \
+                > results/a4/graph_export.log 2>&1 || {
+                  tail -30 results/a4/graph_export.log
+                  echo "Graph export unavailable; no claim of loop closure quality"
+                }
+            ' 2>&1 | tee results/a4/container.log
+
+      - name: Validate complete frame coverage and diagnostics
+        run: |
+          set -euo pipefail
+          sudo chmod -R a+rwX results/a4
+          python3 - <<'PY'
+          import json,sqlite3
+          from pathlib import Path
+          root=Path("results/a4")
+          manifest=json.loads((root/"input_manifest.json").read_text())
+          report=json.loads((root/"full_sequence.json").read_text())
+          assert manifest["frame_stride"]==1 and manifest["max_frames"] is None
+          assert manifest["all_paired_frames_selected"] is True
+          assert report["published_frames"]==manifest["synchronized_rgbd_pairs"]
+          assert report["odominfo_ack_frames"]==report["published_frames"]
+          assert report["source_rgb_frames"]>=report["published_frames"]>150
+          assert report["GT_used_as_input"] is False
+          assert report["odominfo_lost_true_count"]+report["odominfo_lost_false_count"]==report["odominfo_ack_frames"]
+          database=root/"rtabmap.db"
+          assert database.exists() and database.stat().st_size>4096
+          with sqlite3.connect(database) as conn:
+              n=conn.execute("SELECT COUNT(*) FROM Node").fetchone()[0]
+              assert n>=2
+          report["rtabmap_database_nodes"]=n
+          report["experiment_scope"]="ALL_AVAILABLE_RGB_DEPTH_PAIRS_NO_SUBSAMPLING"
+          (root/"full_sequence.json").write_text(json.dumps(report,indent=2)+"\n")
+          print("A4_COMPLETE_FULL_DATASET",{
+            "pairs":report["published_frames"],
+            "odominfo_ack":report["odominfo_ack_frames"],
+            "rtabmap_lost":report["odominfo_lost_true_count"],
+            "rtabmap_success":report["odominfo_lost_false_count"],
+            "technical_valid":report["numerically_valid_odom"],
+            "db_nodes":n})
+          PY
+
+      - name: Upload FULL dataset evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a4-full-tum-rgbd-odominfo
+          path: |
+            results/a4/
+            docker_a4_build.log
+          if-no-files-found: warn
+          retention-days: 30
