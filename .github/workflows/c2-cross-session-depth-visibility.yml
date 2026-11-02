@@ -1,0 +1,112 @@
+name: C2 independent TUM desk2 depth evidence for saved object surfaces
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/c2-cross-session-depth-visibility.yml
+      - src/semantic_map/c2_depth_visibility.py
+      - scripts/c2_cross_sequence_depth_visibility.py
+      - tests/test_c2_depth_visibility.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  independent-visibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: actions/download-artifact@v4
+        with:
+          name: c1-real-dense-YOLOE26x-object-hypothesis-surfaces
+          run-id: 41486402404
+          github-token: ${{ github.token }}
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: a8-TUM-independent-prior-sensitivity
+          run-id: 41451763476
+          github-token: ${{ github.token }}
+          path: .
+      - name: Download ALL REAL independent TUM desk2 depth frames (no shortened sequence)
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import urllib.request, tarfile, shutil, time
+          folder="rgbd_dataset_freiburg1_desk2"
+          dest=Path("data/tum_a7")/folder
+          dest.mkdir(parents=True,exist_ok=True)
+          tarpath=Path("data/tum_a7/desk2.tgz")
+          for host in ("https://vision.in.tum.de/rgbd/dataset/freiburg1",
+                       "https://webshare.cvg.cit.tum.de/rgbd/dataset/freiburg1"):
+              try:
+                  url=f"{host}/{folder}.tgz"
+                  with urllib.request.urlopen(
+                       urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"}),
+                       timeout=180) as stream,tarpath.open("wb") as out:
+                      shutil.copyfileobj(stream,out)
+                  assert tarpath.stat().st_size>20000000
+                  break
+              except Exception as exc:
+                  print("TUM_DOWNLOAD_FAILURE",url,repr(exc),flush=True)
+                  tarpath.unlink(missing_ok=True)
+                  time.sleep(3)
+          if not tarpath.is_file():raise RuntimeError("Official TUM desk2 archive unavailable")
+          with tarfile.open(tarpath,"r:gz") as tar:
+              for member in tar:
+                  parts=Path(member.name).parts
+                  if member.isfile() and len(parts)>=2 and parts[0]==folder and (
+                      member.name in (folder+"/rgb.txt",folder+"/depth.txt") or
+                      member.name.startswith(folder+"/depth/")):
+                      target=Path("data/tum_a7")/member.name
+                      target.parent.mkdir(parents=True,exist_ok=True)
+                      with tar.extractfile(member) as src,target.open("wb") as out:
+                          shutil.copyfileobj(src,out)
+          r=(dest/"rgb.txt").read_text().splitlines()
+          d=(dest/"depth.txt").read_text().splitlines()
+          rgb=[x for x in r if x.strip() and not x.startswith("#")]
+          depth=[x for x in d if x.strip() and not x.startswith("#")]
+          assert len(rgb)==640 and len(depth)==639,(len(rgb),len(depth))
+          assert len(list((dest/"depth").glob("*.png")))==639
+          print("C2_INDEPENDENT_REAL_DEPTH_READY",len(rgb),len(depth),flush=True)
+          PY
+      - name: Validate mathematical invariants against possible false absence
+        run: |
+          python -m pip install -q "numpy>=1.26,<3" "scipy>=1.12,<2" opencv-python-headless pytest
+          PYTHONPATH=src python -m pytest -q tests/test_c2_depth_visibility.py
+      - name: Check 15 C1 surface hypotheses at real A8 accepted map poses
+        run: |
+          set -euo pipefail
+          PYTHONPATH=src python -u scripts/c2_cross_sequence_depth_visibility.py \
+            --root data/tum_a7/rgbd_dataset_freiburg1_desk2 \
+            --loc results/a8/saved_last \
+            --surface results/c1/hypothesis_surfaces.ply \
+            --instances results/c1/hypothesis_surfaces.instances.json \
+            --out results/c2 | tee c2_real.log
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          r=json.loads(Path("results/c2/c2_cross_session_visibility.json").read_text())
+          assert r["real_independent_depth_frames_processed_for_source_validation"]==639
+          assert r["accepted_relocalization_poses_evaluated"]>=20
+          assert r["hypothesis_count"]==15
+          assert r["total_hypothesis_view_checks"]==r["accepted_relocalization_poses_evaluated"]*15
+          assert r["old_memory_mutated"] is False
+          assert r["deleted_objects_established"] is False
+          assert r["moved_objects_established"] is False
+          print("C2_REAL_CROSS_SESSION_EVIDENCE_PASS",r["per_hypothesis_decisions"],flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: c2-independent-full-TUM-depth-15-C1-UUID-visibility
+          path: |
+            results/c2/
+            c2_real.log
+          if-no-files-found: warn
+          retention-days: 30
