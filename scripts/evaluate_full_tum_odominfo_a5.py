@@ -84,7 +84,7 @@ def auc(labels,score):
     ok=np.isfinite(scores)
     labels=labels[ok];scores=scores[ok]
     npos=int(labels.sum()); nneg=int((~labels).sum())
-    if not npos or not nneg:return None
+    if not npos or not nneg or len(np.unique(scores))<2:return None
     ranks=rankdata(scores,method="average")
     return float((ranks[labels].sum()-npos*(npos+1)/2)/(npos*nneg))
 
