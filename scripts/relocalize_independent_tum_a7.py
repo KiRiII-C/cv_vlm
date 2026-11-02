@@ -18,43 +18,17 @@ from semantic_map.tum_yolo_pipeline import parse
 from tum_full_replay_a4 import associate_full_rgb_depth, replay
 
 SCENE = "rgbd_dataset_freiburg1_desk2"
-URL = "https://webshare.cvg.cit.tum.de/rgbd/dataset/freiburg1/" + SCENE + ".tgz"
+URL = "https://vision.in.tum.de/rgbd/dataset/freiburg1/" + SCENE + ".tgz"
 
 def download_desk2(cache: Path):
-    cache.mkdir(parents=True, exist_ok=True)
-    folder = cache / SCENE
-    if (folder/"rgb.txt").is_file() and (folder/"depth.txt").is_file() and (folder/"groundtruth.txt").is_file():
-        return folder
-    archive = cache / (SCENE+".tgz")
-    if not archive.exists() or archive.stat().st_size<20_000_000:
-        for attempt in range(3):
-            try:
-                print("A7_DOWNLOAD_ATTEMPT",attempt+1,URL,flush=True)
-                req=urllib.request.Request(URL,headers={"User-Agent":"cv-vlm-A7-research/1.0"})
-                with urllib.request.urlopen(req,timeout=120) as response, (cache/"desk2.tmp").open("wb") as out:
-                    import shutil
-                    shutil.copyfileobj(response,out)
-                if (cache/"desk2.tmp").stat().st_size<20_000_000:
-                    raise RuntimeError("Unexpectedly small TUM archive")
-                (cache/"desk2.tmp").replace(archive)
-                break
-            except Exception as e:
-                if (cache/"desk2.tmp").exists():(cache/"desk2.tmp").unlink()
-                if attempt==2:raise
-                time.sleep(3*(attempt+1))
-    with tarfile.open(archive,"r:gz") as tar:
-        members=tar.getmembers()
-        for member in members:
-            target=Path(member.name)
-            if (target.is_absolute() or ".." in target.parts or
-                not member.name.startswith(SCENE+"/") or
-                not (member.isfile() or member.isdir())):
-                raise ValueError("Unsafe archive member: "+member.name)
-        tar.extractall(cache,members=members,filter="data")
+    """Use existing, previously verified TUM downloader with two official mirrors."""
+    from semantic_map.tum_yolo_pipeline import download_scene
+    root=download_scene(cache,name=SCENE)
     for name in ("rgb.txt","depth.txt","groundtruth.txt"):
-        if not (folder/name).is_file():
-            raise RuntimeError("Incomplete official TUM archive: "+str(folder/name))
-    return folder
+        if not (root/name).is_file():
+            raise RuntimeError("TUM desk2 archive incomplete: "+str(root/name))
+    return root
+
 
 def independent_pairs(root: Path):
     rgb=parse(root/"rgb.txt")
