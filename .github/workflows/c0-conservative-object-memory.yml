@@ -1,0 +1,79 @@
+name: C0 conservative object memory on REAL B5 + full physical GT
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/c0-conservative-object-memory.yml
+      - src/semantic_map/conservative_object_memory_c0.py
+      - scripts/c0_real_observation_memory.py
+      - tests/test_conservative_object_memory_c0.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  conservative-memory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: actions/download-artifact@v4
+        with:
+          name: b5-real-TUM-RTABMap-YOLOE26x-semantic-map
+          run-id: 41467501932
+          github-token: ${{ github.token }}
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: full-yoloe26x-100frames-*
+          run-id: 40820074555
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: results/c0_inputs
+      - name: Install SciPy / tests and verify invariants
+        run: |
+          set -euo pipefail
+          python -m pip install "numpy>=1.26,<3" "scipy>=1.12,<2" pytest
+          PYTHONPATH=src python -m pytest -q tests/test_conservative_object_memory_c0.py
+      - name: Replay ALL 595 real TUM frames and ALL 300 Hypersim physical-ID GT frames
+        run: |
+          set -euo pipefail
+          PYTHONPATH=src python -u scripts/c0_real_observation_memory.py \
+            --tum results/b5/b5_object_observations.jsonl \
+            --hypersim results/c0_inputs --output results/c0 \
+            2>&1 | tee results_c0.log
+          python - <<'PY'
+          import json,math
+          from pathlib import Path
+          p=Path("results/c0/c0_report.json")
+          d=json.loads(p.read_text())
+          assert d["tum"]["real_rgbd_frames_accounted"]==595
+          assert d["tum"]["real_3d_observations"]==871
+          assert d["tum"]["unknown_unobserved_objects_are_never_auto_deleted"]
+          assert d["physical_UUID_validation"]=="NOT_ACCEPTED"
+          assert len(d["hypersim_full_300_physical_GT"])==3
+          for s,results in d["hypersim_full_300_physical_GT"].items():
+              for name,metrics in results.items():
+                  assert metrics["all_original_frames"]==100
+                  assert metrics["physical_GT_scoring_only"] is True
+                  assert 0<=metrics["IDF1"]<=1
+          assert all(math.isfinite(v["IDF1"]) for v in d["pooled_physical_IDF1"].values())
+          print("C0_COMPLETE_REAL_DATA_REPORT",{
+              "TUM_landmark_candidates":d["tum"]["candidate_count"],
+              "observations":d["tum"]["real_3d_observations"],
+              "Hypersim_pooled":d["pooled_physical_IDF1"]
+          },flush=True)
+          PY
+      - name: Save complete evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c0-real-595-TUM-300-Hypersim-conservative-memory
+          path: |
+            results/c0/
+            results_c0.log
+          if-no-files-found: warn
+          retention-days: 30
