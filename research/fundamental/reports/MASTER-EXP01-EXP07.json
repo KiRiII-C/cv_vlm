@@ -1,0 +1,42 @@
+{
+  "source_runs": {
+    "01": 41359143691,
+    "02": 41359330363,
+    "03": 41359705084,
+    "04": 41360620282,
+    "05": 41391555473,
+    "06": 41391709822,
+    "07": 41392421117
+  },
+  "exp07_paired_seed_differences": {
+    "mlp_plus": {
+      "bonn_xyz_only": 0.5658995815899581,
+      "bonn_xyz_plus_desk": 0.5339958158995817,
+      "mean_difference_percentage_points": -3.1903765690376558,
+      "paired_seed_differences_pp": [
+        -0.5230125523012608,
+        -5.857740585774051
+      ]
+    },
+    "vit_4layer": {
+      "bonn_xyz_only": 0.4686192468619247,
+      "bonn_xyz_plus_desk": 0.446652719665272,
+      "mean_difference_percentage_points": -2.1966527196652708,
+      "paired_seed_differences_pp": [
+        0.0,
+        -4.3933054393305415
+      ]
+    },
+    "geometry_vit": {
+      "bonn_xyz_only": 0.514121338912134,
+      "bonn_xyz_plus_desk": 0.5700836820083682,
+      "mean_difference_percentage_points": 5.596234309623432,
+      "paired_seed_differences_pp": [
+        6.066945606694563,
+        5.125523012552302
+      ]
+    }
+  },
+  "all_experiments_verified": true,
+  "scope": "Three measured RGB-D recordings. No real object GT."
+}

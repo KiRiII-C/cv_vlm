@@ -1,0 +1,159 @@
+name: EXP-20261102-08 Matched unique support across real RGB-D scenes
+on:
+  push:
+    branches: ['experiments/fundamental-spatial-representations-*']
+    paths:
+      - 'research/fundamental/matched_unique_train.py'
+      - 'research/fundamental/aggregate_matched_unique.py'
+      - 'research/fundamental/reports/EXP-20261102-08.md'
+      - 'tests/test_matched_unique_train.py'
+      - '.github/workflows/real-rgbd-matched-unique.yml'
+  pull_request:
+    branches: ['feature/semantic-memory-mapping']
+    paths:
+      - 'research/fundamental/matched_unique_train.py'
+      - 'research/fundamental/aggregate_matched_unique.py'
+      - 'research/fundamental/reports/EXP-20261102-08.md'
+      - 'tests/test_matched_unique_train.py'
+      - '.github/workflows/real-rgbd-matched-unique.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies for actual model import
+        run: |
+          python -m pip install 'numpy>=1.24,<3' 'scipy>=1.10,<2' opencv-python-headless
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Verify exact matched support, nested sample selections, and reproducibility
+        run: python -m unittest discover -s tests -p 'test_matched_unique_train.py' -v
+      - name: Compile scientific experiment and fail-closed aggregator
+        run: python -m py_compile research/fundamental/matched_unique_train.py research/fundamental/aggregate_matched_unique.py
+  train:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        model: ['mlp_plus', 'vit_4layer', 'geometry_vit']
+        arm: ['xyz_256', 'xyz_512', 'mixed_256', 'mixed_512']
+        seed: [0,1]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install numerical and neural libraries (CPU; train from scratch)
+        run: |
+          python -m pip install 'numpy>=1.24,<3' 'scipy>=1.10,<2' opencv-python-headless
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Download original TUM xyz, TUM desk, Bonn RGB-D and GT camera trajectories
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/xyz data/desk data/bonn
+          for part in xyz desk; do
+            URL="https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_${part}.tgz"
+            curl --fail --location --retry 2 --max-time 1000 --output "data/${part}.tgz" "$URL" || \
+            curl --fail --location --retry 2 --max-time 1000 --output "data/${part}.tgz" "${URL/cvg.cit.tum.de/vision.in.tum.de}"
+            tar -xzf "data/${part}.tgz" -C "data/${part}"
+          done
+          curl --fail --location --retry 2 --max-time 1000 \
+            --output data/bonn.zip 'https://www.ipb.uni-bonn.de/html/projects/rgbd_dynamic2019/rgbd_bonn_moving_obstructing_box.zip'
+          unzip -q data/bonn.zip -d data/bonn
+          for folder in xyz desk bonn; do
+            test -n "$(find "data/$folder" -maxdepth 5 -name rgb.txt -print -quit)"
+            test -n "$(find "data/$folder" -maxdepth 5 -name groundtruth.txt -print -quit)"
+          done
+      - name: Train 28 epochs (matched unique sample size and updates), evaluate blind Bonn
+        shell: bash
+        run: |
+          set -euo pipefail
+          XYZ=$(dirname "$(find data/xyz -maxdepth 5 -name rgb.txt -print -quit)")
+          DESK=$(dirname "$(find data/desk -maxdepth 5 -name rgb.txt -print -quit)")
+          BONN=$(dirname "$(find data/bonn -maxdepth 5 -name rgb.txt -print -quit)")
+          python research/fundamental/matched_unique_train.py \
+            --xyz-root "$XYZ" --desk-root "$DESK" --bonn-root "$BONN" \
+            --model '${{ matrix.model }}' --arm '${{ matrix.arm }}' \
+            --seed '${{ matrix.seed }}' --epochs 28
+      - name: Verify checkpoint and physically measured results for this matrix cell
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,pathlib
+          root=pathlib.Path('results/real_rgbd/matched_unique')
+          p=root/'${{ matrix.model }}'/'${{ matrix.arm }}'/'seed_${{ matrix.seed }}'/'metrics.json'
+          assert p.exists(),p
+          x=json.loads(p.read_text())
+          n=int(x['arm'].split('_')[-1])
+          assert x['experiment']=='EXP-20261102-08'
+          assert x['train_unique_correspondence_indices']==n
+          assert x['train_hard_query_indices']==192
+          assert x['epochs']==28 and len(x['curves'])==28
+          assert x['Bonn_blind']['n_queries']>=100
+          assert p.with_name('best.pt').exists()
+          print('EXP08_PASS',x['model'],x['arm'],x['seed'],x['Bonn_blind']['rank1'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exp08-${{ matrix.model }}-${{ matrix.arm }}-seed-${{ matrix.seed }}
+          path: results/real_rgbd/matched_unique/
+          if-no-files-found: warn
+          retention-days: 30
+  aggregate:
+    needs: train
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiments/fundamental-spatial-representations-20261102
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download all 24 trained sensor-evaluation artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: exp08-*
+          path: gathered
+      - name: Fail closed unless all 24 real experiments and checkpoints match
+        shell: bash
+        run: |
+          python research/fundamental/aggregate_matched_unique.py \
+            --artifacts gathered \
+            --out research/fundamental/reports/EXP-20261102-08-results.md \
+            --run-id "$GITHUB_RUN_ID" \
+            --source-sha "$(git rev-parse HEAD)"
+      - name: Upload verified results and table
+        uses: actions/upload-artifact@v4
+        with:
+          name: EXP08-VERIFIED-24-REAL-RGBD-RESULTS
+          path: |
+            research/fundamental/reports/EXP-20261102-08-results.md
+            research/fundamental/reports/EXP-20261102-08-results.json
+            research/fundamental/reports/EXP-20261102-08-results.csv
+          retention-days: 30
+      - name: Commit verified scientific output to same research branch
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add research/fundamental/reports/EXP-20261102-08-results.*
+          if git diff --cached --quiet; then
+            echo 'Verified report already current'
+          else
+            git commit -m 'Publish verified EXP08 real RGB-D matched unique results'
+            git push origin HEAD:experiments/fundamental-spatial-representations-20261102
+          fi

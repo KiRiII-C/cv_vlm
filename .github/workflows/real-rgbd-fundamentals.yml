@@ -1,0 +1,113 @@
+name: Real sensor RGB-D fundamentals
+on:
+  push:
+    branches: ['experiments/fundamental-spatial-representations-*']
+    paths: ['research/fundamental/real_rgbd.py', 'research/fundamental/predictive_state.py', 'research/fundamental/ego_motion_warp.py', 'research/fundamental/bonn_calibration_audit.py', 'research/fundamental/real_neural_contrastive.py', 'research/fundamental/multiview_evidence.py', 'research/fundamental/hard_negative_retrieval.py', 'research/fundamental/cross_scene_transfer.py', '.github/workflows/real-rgbd-fundamentals.yml']
+  pull_request:
+    branches:
+      - 'feature/semantic-memory-mapping'
+  workflow_dispatch:
+jobs:
+  real-sequences:
+    strategy:
+      fail-fast: false
+      matrix:
+        dataset: ['tum_xyz', 'bonn_box']
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Dependencies
+        run: python -m pip install 'numpy>=1.24,<3' 'scipy>=1.10,<2' opencv-python-headless
+      - name: Download original real RGB-D recording
+        shell: bash
+        run: |
+          mkdir -p data
+          if [[ '${{ matrix.dataset }}' == 'tum_xyz' ]]; then
+            curl --fail --location --retry 2 --connect-timeout 20 --max-time 850 --output data/recording.tgz 'https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz' || \
+            curl --fail --location --retry 2 --connect-timeout 20 --max-time 850 --output data/recording.tgz 'https://vision.in.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz'
+            tar -xzf data/recording.tgz -C data
+          else
+            curl --fail --location --retry 2 --connect-timeout 20 --max-time 850 --output data/recording.zip 'https://www.ipb.uni-bonn.de/html/projects/rgbd_dynamic2019/rgbd_bonn_moving_obstructing_box.zip'
+            unzip -q data/recording.zip -d data
+          fi
+          find data -maxdepth 4 -name rgb.txt | head -4
+          test -n "$(find data -maxdepth 5 -name groundtruth.txt -print -quit)"
+      - name: Run experiments on real sensor data
+        shell: bash
+        run: |
+          ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          echo "Data directory: $ROOT"
+          if [[ '${{ matrix.dataset }}' == 'tum_xyz' ]]; then
+            python research/fundamental/real_rgbd.py --root "$ROOT" --dataset tum_xyz --intrinsics 517.3,516.5,318.6,255.3 --n 56
+          else
+            python research/fundamental/real_rgbd.py --root "$ROOT" --dataset bonn_box --intrinsics 542.822841,542.576870,315.593520,237.756098 --n 56
+          fi
+      - name: Compare Hankel predictive-state and PCA memory on real video
+        shell: bash
+        run: |
+          ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          python research/fundamental/predictive_state.py --root "$ROOT" --name ${{ matrix.dataset }} --frames 140
+      - name: Test physical camera-motion compensation against persistence
+        shell: bash
+        run: |
+          ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          if [[ '${{ matrix.dataset }}' == 'tum_xyz' ]]; then
+            python research/fundamental/ego_motion_warp.py --root "$ROOT" --name tum_xyz --intrinsics 517.3,516.5,318.6,255.3
+          else
+            python research/fundamental/ego_motion_warp.py --root "$ROOT" --name bonn_box --intrinsics 542.822841,542.576870,315.593520,237.756098
+          fi
+      - name: Audit Bonn camera-to-marker extrinsics on heldout measured depth
+        if: matrix.dataset == 'bonn_box'
+        shell: bash
+        run: |
+          ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          python research/fundamental/bonn_calibration_audit.py --root "$ROOT"
+      - name: Install CPU PyTorch for real-data encoder comparison
+        if: matrix.dataset == 'tum_xyz'
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Train and evaluate five patch encoders on real RGB-D
+        if: matrix.dataset == 'tum_xyz'
+        shell: bash
+        run: |
+          ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          python research/fundamental/real_neural_contrastive.py --root "$ROOT" --epochs 8
+      - name: EXP-20261102-01 real multiview evidence memory
+        shell: bash
+        run: |
+          ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          if [[ '${{ matrix.dataset }}' == 'tum_xyz' ]]; then
+            python research/fundamental/multiview_evidence.py --root "$ROOT" --dataset tum_xyz --intrinsics 517.3,516.5,318.6,255.3 --frames 100
+          else
+            python research/fundamental/multiview_evidence.py --root "$ROOT" --dataset bonn_box --intrinsics 542.822841,542.576870,315.593520,237.756098 --frames 100
+          fi
+      - name: EXP-20261102-02 physical-point retrieval against color-similar hard negatives
+        shell: bash
+        run: |
+          ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          if [[ '${{ matrix.dataset }}' == 'tum_xyz' ]]; then
+            python research/fundamental/hard_negative_retrieval.py --root "$ROOT" --dataset tum_xyz --intrinsics 517.3,516.5,318.6,255.3 --frames 84
+          else
+            python research/fundamental/hard_negative_retrieval.py --root "$ROOT" --dataset bonn_box --intrinsics 542.822841,542.576870,315.593520,237.756098 --frames 84
+          fi
+      - name: EXP-20261102-03 train on TUM and test unseen Bonn, no fine-tuning
+        if: matrix.dataset == 'tum_xyz'
+        shell: bash
+        run: |
+          TUM_ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          mkdir -p data/bonn_transfer
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 850 --output data/bonn_transfer.zip 'https://www.ipb.uni-bonn.de/html/projects/rgbd_dynamic2019/rgbd_bonn_moving_obstructing_box.zip'
+          unzip -q data/bonn_transfer.zip -d data/bonn_transfer
+          BONN_ROOT=$(dirname "$(find data/bonn_transfer -maxdepth 5 -name rgb.txt -print -quit)")
+          python research/fundamental/cross_scene_transfer.py --tum-root "$TUM_ROOT" --bonn-root "$BONN_ROOT"
+      - name: Upload measured results (not source data)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-rgbd-${{ matrix.dataset }}
+          path: results/real_rgbd/
+          if-no-files-found: warn
+          retention-days: 30

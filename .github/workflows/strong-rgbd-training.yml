@@ -1,0 +1,76 @@
+name: EXP-20261102-04 Strong real RGB-D encoder training
+on:
+  push:
+    branches: ['experiments/fundamental-spatial-representations-*']
+    paths:
+      - 'research/fundamental/strong_encoder_training.py'
+      - '.github/workflows/strong-rgbd-training.yml'
+  pull_request:
+    branches: ['feature/semantic-memory-mapping']
+    paths:
+      - 'research/fundamental/strong_encoder_training.py'
+      - '.github/workflows/strong-rgbd-training.yml'
+  workflow_dispatch:
+jobs:
+  strong-train:
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        model: ['mlp_plus', 'rgbd_cnn_plus', 'vit_2layer', 'vit_4layer', 'geometry_vit', 'conv_transformer']
+        seed: [0, 1]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU numerical and neural dependencies
+        run: |
+          python -m pip install 'numpy>=1.24,<3' 'scipy>=1.10,<2' opencv-python-headless
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Download original real TUM and Bonn RGB-D recordings
+        shell: bash
+        run: |
+          mkdir -p data/tum data/bonn
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 850 --output data/tum.tgz 'https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz' || \
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 850 --output data/tum.tgz 'https://vision.in.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz'
+          tar -xzf data/tum.tgz -C data/tum
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 850 --output data/bonn.zip 'https://www.ipb.uni-bonn.de/html/projects/rgbd_dynamic2019/rgbd_bonn_moving_obstructing_box.zip'
+          unzip -q data/bonn.zip -d data/bonn
+          test -n "$(find data/tum -maxdepth 5 -name groundtruth.txt -print -quit)"
+          test -n "$(find data/bonn -maxdepth 5 -name groundtruth.txt -print -quit)"
+      - name: Train 48 epochs and evaluate only selected validation checkpoint
+        shell: bash
+        run: |
+          TUM_ROOT=$(dirname "$(find data/tum -maxdepth 5 -name rgb.txt -print -quit)")
+          BONN_ROOT=$(dirname "$(find data/bonn -maxdepth 5 -name rgb.txt -print -quit)")
+          python research/fundamental/strong_encoder_training.py \
+            --tum-root "$TUM_ROOT" --bonn-root "$BONN_ROOT" \
+            --model '${{ matrix.model }}' --epochs 48 --seed '${{ matrix.seed }}'
+      - name: Validate metrics and physical dataset split
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('results/strong_training/${{ matrix.model }}/seed_${{ matrix.seed }}/metrics.json')
+          assert p.exists(),p
+          x=json.loads(p.read_text())
+          assert x['epochs_run']==48
+          assert len(x['learning_curve'])==48
+          assert x['training_positive_pairs']>=500
+          for data in ('test_TUM','test_Bonn'):
+              assert x[data]['n_queries']>=45
+              assert 0<=x[data]['rank1']<=1
+          assert p.with_name('best.pt').exists()
+          print('PASS', x['model'], x['seed'], x['best_epoch'],x['test_Bonn']['rank1'])
+          PY
+      - name: Upload model, learning curves and held-out results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: strong-${{ matrix.model }}-seed-${{ matrix.seed }}
+          path: results/strong_training/
+          retention-days: 30
+          if-no-files-found: warn

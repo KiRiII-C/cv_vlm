@@ -1,0 +1,129 @@
+name: Unified synthesis EXP01 through EXP07
+on:
+  push:
+    branches: ['experiments/fundamental-spatial-representations-*']
+    paths:
+      - 'research/fundamental/aggregate_full_suite.py'
+      - '.github/workflows/fundamental-unified-analysis.yml'
+  pull_request:
+    branches: ['feature/semantic-memory-mapping']
+    paths:
+      - 'research/fundamental/aggregate_full_suite.py'
+      - '.github/workflows/fundamental-unified-analysis.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  synthesize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiments/fundamental-spatial-representations-20261102
+      - name: Verify all twelve EXP07 model runs are finished and successful
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os,time,urllib.request
+          url='https://api.github.com/repos/KiRiII-C/cv_vlm/actions/runs/41392421117/jobs?per_page=100'
+          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],
+                   'Accept':'application/vnd.github+json','User-Agent':'fundamental-research'}
+          for attempt in range(72):
+              req=urllib.request.Request(url,headers=headers)
+              with urllib.request.urlopen(req,timeout=20) as f:
+                  jobs=json.load(f)['jobs']
+              statuses={str(j['name']):j.get('conclusion') or j.get('status') for j in jobs}
+              print('EXP07 job audit:',statuses,flush=True)
+              if len(jobs)==12 and all(j.get('conclusion')=='success' for j in jobs):
+                  print('PASS EXP07 has 12 successful jobs');break
+              if any(j.get('conclusion') in ('failure','cancelled','timed_out') for j in jobs):
+                  raise RuntimeError('EXP07 is incomplete or failed; report must not claim completion')
+              time.sleep(60)
+          else:
+              raise RuntimeError('EXP07 still running; refusing partial unified report')
+          PY
+      - name: Download EXP01 real sensor artifacts
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 41359143691
+          github-token: ${{ github.token }}
+          pattern: real-rgbd-*
+          merge-multiple: true
+          path: gathered/exp01
+      - name: Download EXP02 physically hard negatives
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 41359330363
+          github-token: ${{ github.token }}
+          pattern: real-rgbd-*
+          merge-multiple: true
+          path: gathered/exp02
+      - name: Download EXP03 pretrained scratch checkpoints and transfer
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 41359705084
+          github-token: ${{ github.token }}
+          pattern: real-rgbd-*
+          merge-multiple: true
+          path: gathered/exp03
+      - name: Download all 12 EXP04 48-epoch encoders
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 41360620282
+          github-token: ${{ github.token }}
+          pattern: strong-*
+          merge-multiple: true
+          path: gathered/exp04
+      - name: Download EXP05 three real datasets
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 41391555473
+          github-token: ${{ github.token }}
+          pattern: exp05-*
+          merge-multiple: true
+          path: gathered/exp05
+      - name: Download EXP06 risk-aware memory results
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 41391709822
+          github-token: ${{ github.token }}
+          pattern: exp05-*
+          merge-multiple: true
+          path: gathered/exp06
+      - name: Download EXP07 matched-step neural training
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 41392421117
+          github-token: ${{ github.token }}
+          pattern: exp07-*
+          merge-multiple: true
+          path: gathered/exp07
+      - name: Independently validate all measured results and generate one report
+        run: |
+          python research/fundamental/aggregate_full_suite.py \
+            --artifacts gathered \
+            --output research/fundamental/reports/MASTER-EXP01-EXP07.md
+      - name: Upload unified evidence and report
+        uses: actions/upload-artifact@v4
+        with:
+          name: MASTER-EXP01-EXP07-VERIFIED
+          path: |
+            research/fundamental/reports/MASTER-EXP01-EXP07.md
+            research/fundamental/reports/MASTER-EXP01-EXP07.json
+          retention-days: 30
+      - name: Commit final scientific report in the same research branch
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add research/fundamental/reports/MASTER-EXP01-EXP07.md research/fundamental/reports/MASTER-EXP01-EXP07.json
+          if git diff --cached --quiet; then
+            echo 'Unified research report unchanged'
+          else
+            git commit -m 'Consolidate seven real RGB-D experiments into one verified scientific report'
+            git push origin HEAD:experiments/fundamental-spatial-representations-20261102
+          fi

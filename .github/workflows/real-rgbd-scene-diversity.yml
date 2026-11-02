@@ -1,0 +1,82 @@
+name: EXP-20261102-07 Real scene-diversity controlled neural training
+on:
+  push:
+    branches: ['experiments/fundamental-spatial-representations-*']
+    paths:
+      - 'research/fundamental/scene_diversity_train.py'
+      - '.github/workflows/real-rgbd-scene-diversity.yml'
+  pull_request:
+    branches: ['feature/semantic-memory-mapping']
+    paths:
+      - 'research/fundamental/scene_diversity_train.py'
+      - '.github/workflows/real-rgbd-scene-diversity.yml'
+  workflow_dispatch:
+jobs:
+  train:
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        model: ['mlp_plus','vit_4layer','geometry_vit']
+        arm: ['xyz_only','xyz_plus_desk']
+        seed: [0,1]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install neural and numerical dependencies
+        run: |
+          python -m pip install 'numpy>=1.24,<3' 'scipy>=1.10,<2' opencv-python-headless
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Obtain three ORIGINAL recorded RGB-D datasets and GT camera trajectories
+        shell: bash
+        run: |
+          mkdir -p data/xyz data/desk data/bonn
+          for part in xyz desk; do
+            URL="https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_${part}.tgz"
+            curl --fail --location --retry 2 --max-time 1000 --output data/${part}.tgz "$URL" || \
+            curl --fail --location --retry 2 --max-time 1000 --output data/${part}.tgz "${URL/cvg.cit.tum.de/vision.in.tum.de}"
+            tar -xzf data/${part}.tgz -C data/${part}
+          done
+          curl --fail --location --retry 2 --max-time 1000 --output data/bonn.zip 'https://www.ipb.uni-bonn.de/html/projects/rgbd_dynamic2019/rgbd_bonn_moving_obstructing_box.zip'
+          unzip -q data/bonn.zip -d data/bonn
+          for folder in xyz desk bonn; do
+            test -n "$(find data/$folder -maxdepth 5 -name rgb.txt -print -quit)"
+            test -n "$(find data/$folder -maxdepth 5 -name groundtruth.txt -print -quit)"
+          done
+      - name: Equal-step training for 28 epochs and blind Bonn evaluation
+        shell: bash
+        run: |
+          XYZ=$(dirname "$(find data/xyz -maxdepth 5 -name rgb.txt -print -quit)")
+          DESK=$(dirname "$(find data/desk -maxdepth 5 -name rgb.txt -print -quit)")
+          BONN=$(dirname "$(find data/bonn -maxdepth 5 -name rgb.txt -print -quit)")
+          python research/fundamental/scene_diversity_train.py \
+            --xyz-root "$XYZ" --desk-root "$DESK" --bonn-root "$BONN" \
+            --model '${{ matrix.model }}' --arm '${{ matrix.arm }}' \
+            --seed '${{ matrix.seed }}' --epochs 28
+      - name: Validate exact training budget and real-data test outputs
+        run: |
+          python - <<'PY'
+          import pathlib,json
+          root=pathlib.Path('results/real_rgbd/scene_diversity')
+          p=root/'${{ matrix.model }}'/'${{ matrix.arm }}'/'seed_${{ matrix.seed }}'/'metrics.json'
+          assert p.exists(),p
+          x=json.loads(p.read_text())
+          assert len(x['curves'])==28
+          assert x['train_pairs_available']>=500
+          assert x['Bonn_blind']['n_queries']>=100
+          assert x['TUM_desk_heldout']['n_queries']>=45
+          assert 0<=x['Bonn_blind']['rank1']<=1
+          assert p.with_name('best.pt').exists()
+          print('PASS EXP07:',x['model'],x['arm'],x['seed'],x['Bonn_blind']['rank1'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exp07-${{ matrix.model }}-${{ matrix.arm }}-seed-${{ matrix.seed }}
+          path: results/real_rgbd/scene_diversity/
+          if-no-files-found: warn
+          retention-days: 30
