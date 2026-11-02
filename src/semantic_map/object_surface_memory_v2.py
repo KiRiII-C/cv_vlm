@@ -95,6 +95,59 @@ class ObjectSurfaceMemoryV2:
                             (map_id,uuid,source,str(frame_id),int(pose_version)))
         return len(world)
 
+    def integrate_world_points(self,uuid,world_xyz,*,source,frame_id,map_id='default',
+                               timestamp=0.,pose_version=0,measured_rgb=None):
+        """Fuse ACTUAL measured, pose-aligned RGB-D object points.
+
+        Input world points must be tied to one original RGB-D segmentation
+        observation. No inferred mask, interpolated depth, or GT physical UUID
+        is accepted by this interface. Missing RGB is stored as zero but never
+        represented as a real colour observation. export(instance_colors=True)
+        instead uses stable technical UUID hues.
+        """
+        points=np.asarray(world_xyz,dtype=np.float64)
+        if points.ndim!=2 or points.shape[1]!=3 or not np.isfinite(points).all():
+            raise ValueError('Expected finite Nx3 measured world coordinates')
+        if not len(points):return 0
+        if not uuid or not source or not frame_id:
+            raise ValueError('Object, source and original frame are required')
+        cols=(np.zeros((len(points),3),dtype=float) if measured_rgb is None
+              else np.asarray(measured_rgb,dtype=float))
+        if (cols.shape!=(len(points),3) or not np.isfinite(cols).all() or
+                np.any(cols<0) or np.any(cols>255)):
+            raise ValueError('RGB must be Nx3 observed 0..255 values or missing')
+        versions={int(row[0]) for row in self.db.execute('''SELECT DISTINCT pose_version
+            FROM surface_frame_v2 WHERE map_id=?''',(map_id,))}
+        if versions and versions!={int(pose_version)}:
+            raise RuntimeError('Surface map has another pose-graph version: reset and replay source points')
+        if self.db.execute('''SELECT 1 FROM surface_frame_v2
+            WHERE map_id=? AND uuid=? AND source=? AND frame_id=?''',
+            (map_id,str(uuid),source,str(frame_id))).fetchone():
+            return 0
+        unique,inv=np.unique(self._indices(points),axis=0,return_inverse=True)
+        counts=np.bincount(inv,minlength=len(unique))
+        sumpos=np.column_stack([np.bincount(inv,weights=points[:,i],minlength=len(unique))
+                                for i in range(3)])
+        sumrgb=np.column_stack([np.bincount(inv,weights=cols[:,i],minlength=len(unique))
+                                for i in range(3)])
+        rows=[(map_id,str(uuid),int(ix),int(iy),int(iz),
+               float(x),float(y),float(z),float(red),float(green),float(blue),
+               int(cnt),0,float(timestamp))
+              for (ix,iy,iz),(x,y,z),(red,green,blue),cnt in zip(unique,sumpos,sumrgb,counts)]
+        with self.db:
+            self.db.executemany('''INSERT INTO object_surface_v2
+               (map_id,uuid,ix,iy,iz,sum_x,sum_y,sum_z,sum_r,sum_g,sum_b,support,negative,last_evidence)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(map_id,uuid,ix,iy,iz) DO UPDATE SET
+                 sum_x=sum_x+excluded.sum_x,sum_y=sum_y+excluded.sum_y,sum_z=sum_z+excluded.sum_z,
+                 sum_r=sum_r+excluded.sum_r,sum_g=sum_g+excluded.sum_g,sum_b=sum_b+excluded.sum_b,
+                 support=support+excluded.support,
+                 negative=MAX(0,negative-1),last_evidence=excluded.last_evidence''',rows)
+            self.db.execute('''INSERT INTO surface_frame_v2
+                 (map_id,uuid,source,frame_id,pose_version) VALUES(?,?,?,?,?)''',
+                 (map_id,str(uuid),source,str(frame_id),int(pose_version)))
+        return len(points)
+
     def refute_visible_cells(self,uuid,verified_free_xyz,*,map_id='default',timestamp=0.):
         """Decay ONLY cells whose occupancy was explicitly checked free.
 
