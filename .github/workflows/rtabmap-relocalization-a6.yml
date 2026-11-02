@@ -162,9 +162,9 @@ jobs:
                 -p subscribe_odom_info:=false -p publish_tf:=true \
                 -p pub_loc_pose_only_when_localizing:=true \
                 -p database_path:=/workspace/results/a6_map/rtabmap.db \
-                -p "Mem/IncrementalMemory:='"false"'" \
-                -p "Mem/LocalizationReadOnly:='"true"'" \
-                -p "RGBD/StartAtOrigin:='"true"'" \
+                -p "Mem/IncrementalMemory:=\"false\"" \
+                -p "Mem/LocalizationReadOnly:=\"true\"" \
+                -p "RGBD/StartAtOrigin:=\"true\"" \
                 -r rgbd_image:=/camera/rgbd_image -r odom:=/odom \
                 > results/a6loc/slam.log 2>&1 &
               SLAM_PID=$!
