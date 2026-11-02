@@ -1,0 +1,90 @@
+name: B7 true dense full TUM YOLOE26x measured object clouds
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/b7-full-density-measured-tum.yml
+      - scripts/b7_export_dense_tum_semantic_map.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  semantic-map:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      OMP_NUM_THREADS: '3'
+      MKL_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MPLBACKEND: 'Agg'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download exact A6 full 595-frame optimized map, RGBD and measured poses
+        uses: actions/download-artifact@v4
+        with:
+          name: a6-full-tum-graph-geometric-evidence
+          run-id: 41444730029
+          github-token: ${{ github.token }}
+          path: .
+      - name: Install official pretrained YOLOE26x-seg + true 3D map renderer
+        run: |
+          set -euo pipefail
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test]' 'ultralytics>=8.4.12' matplotlib trimesh plotly
+          python -m py_compile scripts/b7_export_dense_tum_semantic_map.py \
+            scripts/b6_render_dense_semantic_map.py
+          python -m pytest -q tests/test_shared_rgbd_geometry_b.py \
+            tests/test_short_term_semantics_b.py
+      - name: FULL 595 real RGB-D, same 119 YOLOE26x keyframes; export actual 3D observations
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="src:scripts"
+          python -u scripts/b7_export_dense_tum_semantic_map.py \
+            --data data/tum --poses results/a6/optimized_full_poses.json \
+            --out results/b7 --weights yoloe-26x-seg.pt \
+            --device cpu --stride 5 2>&1 | tee b7_full_inference.log
+          python -u scripts/b6_render_dense_semantic_map.py \
+            --cloud results/b7/b5_semantic_pointcloud.npz \
+            --tsdf results/a6/optimized_geometry/tsdf_cloud.ply \
+            --voxel 0.01 --out results/b7/dense_view \
+            2>&1 | tee b7_render.log
+          python - <<'PY'
+          from pathlib import Path
+          import json,numpy as np
+          p=Path("results/b7")
+          report=json.loads((p/"b1_full_tum_report.json").read_text())
+          events=[json.loads(line) for line in (p/"b5_object_observations.jsonl").read_text().splitlines()]
+          cloud=np.load(p/"b5_semantic_pointcloud.npz")
+          voxel=json.loads((p/"dense_view"/"b6_report.json").read_text())
+          assert report["counts"]["rgbd_frames_processed"]==595
+          assert report["counts"]["detector_keyframes"]==119
+          assert report["counts"]["3d_observations"]==len(events)>600
+          assert report["semantic_map_export"]["per_mask_export_sample_cap"]==3000
+          assert len(cloud["xyz"])>700000
+          assert len(cloud["labels"])==len(cloud["xyz"])==len(cloud["confidence"])
+          assert voxel["source_measured_YOLO_XYZ"]==len(cloud["xyz"])
+          assert voxel["voxel_size_m"]==.01
+          assert voxel["no_synthetic_or_interpolated_points"] is True
+          assert report["ground_truth_used_for_pose"] is False
+          print("B7_TRUE_DENSE_MEASURED_MAP_PASS",{
+            "depth_frames":595,"keyframes":119,
+            "true_measured_object_points":len(cloud["xyz"]),
+            "measured_voxels":voxel["observed_voxels"],
+            "valid_objects_observed":len(events)},flush=True)
+          PY
+      - name: Upload actual high density RGBD points and map
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b7-high-density-real-RGBD-YOLOE26x-map
+          path: |
+            results/b7/
+            b7_full_inference.log
+            b7_render.log
+          if-no-files-found: warn
+          retention-days: 30
