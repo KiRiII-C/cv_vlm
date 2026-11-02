@@ -23,8 +23,8 @@
 | A3-R | Повторяемость A3 и влияние замыкания циклов | 3 RUNS COMPLETE / FRONTEND REPRODUCIBILITY LIMITED / 3D ACCURACY NOT_VALIDATED | [Отчёт](experiments/A3_repeatability.md) |
 | A4 | Полный TUM RGB-D без прореживания: OdomInfoLite и подтверждение каждого кадра | PASS: 595/595 уникальных RGB-D пар, RTAB-Map lost=0, технически валидных 594, ATE 6.75 см; 18 RGB без уникальной пары | [A4](experiments/A4_full_tum_odometry.md) |
 | A5 | Информативность OdomInfo на полной TUM: покадровая ATE/RPE и достоверность регистрации | PASS: 595/595 обработано, 594 оценено, ATE 6.36 см, RPE 9.2 мм; OdomInfo lost не выявляет 28 ATE >10 см; переносимость не подтверждена | [Результаты A5](experiments/A5_results.md) |
-| A6 | Полная траектория RTAB-Map, интерполяция графовых поправок, сравнение трёх TSDF по всем позам | RUNNING / NOT_VALIDATED | [A6](experiments/A6_full_graph_geometry_relocalization.md) |
-| A6-L | Перезапуск узлов с сохранённой картой, другая стартовая позиция, повторный просмотр всех кадров | RUNNING / NOT_VALIDATED — требуются реальные loop closure и localization_pose | [A6-L](experiments/A6_full_graph_geometry_relocalization.md) |
+| A6 | Полный RGB-D оптимизированный граф и три TSDF | FULL_DATASET_PASS: 595 пар, 594 измеренные позы, ATE RMSE 5.88 → 2.19 см; точность независимой 3D-геометрии не проверена | [A6](experiments/A6_full_graph_geometry_relocalization.md) |
+| A6-L | Релокализация после рестарта со смещённым началом полной последовательности | SAME_SEQUENCE_SMOKE_PASS: 38 глобальных совпадений, 39 поз, восстановление после 47 lost-кадров; независимая hint-free релокализация NOT_VALIDATED | [A6-L](experiments/A6_full_graph_geometry_relocalization.md) |
 
 
 **Полнота данных:** начиная с A4 все новые эксперименты должны обрабатывать все доступные синхронизированные RGB-D-пары выбранного датасета; лимиты вида 150 кадров и каждый третий кадр запрещены. Исторические A1–A3 не соответствовали этому требованию и не являются полными прогонами.
