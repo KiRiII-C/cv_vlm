@@ -114,7 +114,7 @@ def main():
     best_epoch = 0
     for epoch in range(args.epochs):
         model.train()
-        inds = torch.randint(0, len(X), (960,))
+        inds = torch.stack([torch.randperm(len(X))[:64] for _ in range(15)], dim=0)
         hperm = torch.randperm(len(hx))
         total = 0.
         for step, ix in enumerate(inds.split(64)):
@@ -152,6 +152,7 @@ def main():
         'train_hard_query_indices': len(hx),
         'train_hard_query_sha256': hashlib.sha256(hidx.tobytes()).hexdigest(),
         'updates_per_epoch': 15, 'positive_draws_per_epoch': 960,
+        'unique_positive_index_per_minibatch': True,
         'train_available': {name: len(v[0]) for name, v in train.items()},
         'dataset_index_sha256': {
             'tum_xyz': fingerprint(args.xyz_root),
