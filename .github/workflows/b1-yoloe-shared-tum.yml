@@ -1,0 +1,74 @@
+name: B1 YOLOE shared 3D objects short association full TUM
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - scripts/b1_yoloe_full_tum.py
+      - src/semantic_map/short_term_semantics_b.py
+      - tests/test_short_term_semantics_b.py
+      - .github/workflows/b1-yoloe-shared-tum.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  yoloe-full-sensor-stream:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 270
+    env:
+      OMP_NUM_THREADS: '3'
+      MKL_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: a6-full-tum-graph-geometric-evidence
+          run-id: 41444730029
+          github-token: ${{ github.token }}
+          path: .
+      - name: Install PyTorch CPU and official YOLOE runtime
+        run: |
+          set -euo pipefail
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test]' 'ultralytics>=8.4.12'
+          python -m pytest -q tests/test_shared_rgbd_geometry_b.py \
+            tests/test_short_term_semantics_b.py \
+            tests/test_yoloe26_temporal.py
+      - name: Run full real 595-frame sensor pipeline (YOLOE every fifth keyframe)
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="src:scripts"
+          python -u scripts/b1_yoloe_full_tum.py \
+            --data data/tum --poses results/a6/optimized_full_poses.json \
+            --out results/b1 --weights yoloe-26s-seg.pt \
+            --device cpu --stride 5 2>&1 | tee b1_full_tum.log
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("results/b1/b1_full_tum_report.json").read_text())
+          frames=[json.loads(l) for l in Path("results/b1/b1_frame_coverage.jsonl").read_text().splitlines()]
+          assert d["counts"]["rgbd_frames_processed"]==len(frames)==595
+          assert d["counts"]["frames_without_pose"]==1
+          assert d["counts"]["detector_keyframes"]>=115
+          assert d["counts"]["3d_observations"]>0
+          assert d["ground_truth_used_for_pose"] is False
+          assert d["all_depth_frames_geometry_processed"] is True
+          assert d["all_depth_frames_detected"] is False
+          assert d["GT_physical_instance_ID_available"] is False
+          print("B1_FULL_TUM_TECHNICAL_PASS",d["counts"],flush=True)
+          PY
+      - name: Upload YOLO masks, 3D object and track evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b1-full-TUM-YOLOE3D-short-tracking
+          path: |
+            results/b1/
+            b1_full_tum.log
+          if-no-files-found: warn
+          retention-days: 30
