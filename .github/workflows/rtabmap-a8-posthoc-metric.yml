@@ -1,0 +1,99 @@
+name: A8 posthoc sparse localization metric validation
+
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/rtabmap-a8-posthoc-metric.yml
+      - scripts/evaluate_sparse_localization_a8.py
+      - scripts/evaluate_pose_agreement_a8.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  posthoc-metrics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get exact completed A8 real-recording artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: a8-TUM-independent-prior-sensitivity
+          run-id: 41451763476
+          github-token: ${{ github.token }}
+          path: .
+
+      - name: Fetch only reference GT file for separate TUM desk2 recording
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import tarfile,urllib.request,shutil
+          scene="rgbd_dataset_freiburg1_desk2"
+          src=f"https://vision.in.tum.de/rgbd/dataset/freiburg1/{scene}.tgz"
+          dest=Path("data/tum_a7")/scene/"groundtruth.txt"
+          dest.parent.mkdir(parents=True,exist_ok=True)
+          req=urllib.request.Request(src,headers={"User-Agent":"Mozilla/5.0"})
+          with urllib.request.urlopen(req,timeout=180) as response:
+              with tarfile.open(fileobj=response,mode="r|gz") as tar:
+                  for member in tar:
+                      if member.name==scene+"/groundtruth.txt":
+                          with tar.extractfile(member) as stream, dest.open("wb") as out:
+                              shutil.copyfileobj(stream,out)
+                          break
+          assert dest.is_file() and dest.stat().st_size>10_000, "Missing independent TUM GT"
+          print("A8_POSTHOC_GT_FETCHED",dest,dest.stat().st_size,flush=True)
+          PY
+
+      - name: Compute reproducible inter-arm consistency and GT-gauge-invariant sparse errors
+        run: |
+          set -euo pipefail
+          python3 -m venv .a8env
+          .a8env/bin/pip -q install "numpy>=1.26,<3" "scipy>=1.12,<2"
+          .a8env/bin/python -m py_compile \
+            scripts/evaluate_pose_agreement_a8.py \
+            scripts/evaluate_sparse_localization_a8.py
+          .a8env/bin/python scripts/evaluate_pose_agreement_a8.py \
+            --root results/a8 --map-db results/a8_map/rtabmap.db \
+            | tee results/a8/pose_agreement.log
+          .a8env/bin/python scripts/evaluate_sparse_localization_a8.py \
+            --root results/a8 \
+            --gt data/tum_a7/rgbd_dataset_freiburg1_desk2/groundtruth.txt \
+            | tee results/a8/sparse_metric.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,math
+          p=Path("results/a8")
+          a=json.loads((p/"a8_pose_agreement.json").read_text())
+          s=json.loads((p/"a8_sparse_metric_report.json").read_text())
+          assert a["no_saved_last_pose_in_this_database"] is True
+          assert a["map_node_count"]>=10
+          assert set(s["arms"])=={"first_node","saved_last","wrong_8m"}
+          for name in s["arms"]:
+              assert s["arms"][name]["accepted_poses_with_close_GT"]>=8
+              assert math.isfinite(s["arms"][name][
+                  "successive_accepted_pose_relative_translation_error_m"]["rmse"])
+          print("A8_POSTHOC_ACCEPTED",{
+              k:{"n":v["accepted_poses_with_close_GT"],
+                 "relative_RPE_translation_m":
+                  v["successive_accepted_pose_relative_translation_error_m"]["rmse"]}
+              for k,v in s["arms"].items()},flush=True)
+          PY
+
+      - name: Publish metric evidence (without duplicating source archive)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a8-posthoc-pose-consistency-and-GT-relative-errors
+          path: |
+            results/a8/a8_pose_agreement.json
+            results/a8/a8_sparse_metric_report.json
+            results/a8/pose_agreement.log
+            results/a8/sparse_metric.log
+          if-no-files-found: warn
+          retention-days: 30
