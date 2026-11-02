@@ -1,0 +1,81 @@
+name: C1 real dense B7 per-UUID surface memory
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/c1-uuid-surfaces-real-tum.yml
+      - scripts/c1_fuse_real_b7_uuid_surfaces.py
+      - src/semantic_map/object_surface_memory_v2.py
+      - tests/test_c1_measured_object_surfaces.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-uuid-clouds:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: b7-high-density-real-RGBD-YOLOE26x-map
+          run-id: 41484368417
+          github-token: ${{ github.token }}
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: c0-real-TUM-B5-persistent-object-memory
+          run-id: 41483006509
+          github-token: ${{ github.token }}
+          path: .
+      - name: Validate 3D point evidence ingestion and pose graph version gating
+        run: |
+          set -euo pipefail
+          python -m pip install -e '.[test]' plotly
+          python -m pytest -q tests/test_c1_measured_object_surfaces.py \
+            tests/test_object_surface_memory_v2.py
+      - name: Align all 871 original RGB-D masks to C0 memory, fuse only confirmed hypothesis surfaces
+        run: |
+          set -euo pipefail
+          python -u scripts/c1_fuse_real_b7_uuid_surfaces.py \
+            --points results/b7/b5_semantic_pointcloud.npz \
+            --source-events results/b7/b5_object_observations.jsonl \
+            --audit results/c0/c0_event_audit.jsonl \
+            --c0-db results/c0/object_memory.sqlite \
+            --out results/c1 2>&1 | tee c1_full_real.log
+          python - <<'PY'
+          from pathlib import Path
+          import json,numpy as np,sqlite3
+          p=Path("results/c1")
+          d=json.loads((p/"c1_report.json").read_text())
+          b7=np.load("results/b7/b5_semantic_pointcloud.npz")
+          assert d["original_rgbd_frames"]==595
+          assert d["YOLOE_keyframes"]==119
+          assert d["real_source_semantic_points"]==len(b7["xyz"])==1813505
+          assert d["original_B7_observations"]==871
+          assert d["preexisting_confirmed_hypotheses"]==15
+          assert d["observed_UUID_hypotheses_exported"]>=5
+          assert d["exported_UUID_voxels_min_2_support"]>3000
+          assert d["counts"]["measured_points_fused_into_UUID_hypotheses"]>50000
+          assert d["counts"]["all_source_points"]==1813505
+          assert d["ambiguity_does_not_force_UUID"] is True
+          assert (p/"hypothesis_clouds_interactive.html").stat().st_size>300000
+          assert (p/"hypothesis_surfaces.ply").stat().st_size>100000
+          with sqlite3.connect(p/"object_memory_with_surfaces.sqlite") as db:
+              assert db.execute("select count(*) from object_surface_v2").fetchone()[0]>3000
+          print("C1_FULL_REAL_HYPOTHESIS_CLOUD_PASS",d,flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: c1-real-dense-YOLOE26x-object-hypothesis-surfaces
+          path: |
+            results/c1/
+            c1_full_real.log
+          if-no-files-found: warn
+          retention-days: 30
