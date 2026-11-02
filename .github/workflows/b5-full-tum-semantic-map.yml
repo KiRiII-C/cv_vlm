@@ -1,0 +1,93 @@
+name: B5 full TUM RTAB-Map and YOLOE-26x semantic 3D map
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/b5-full-tum-semantic-map.yml
+      - scripts/b5_export_full_tum_semantic_map.py
+      - scripts/b5_render_semantic_map.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  semantic-map:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      OMP_NUM_THREADS: '3'
+      MKL_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MPLBACKEND: 'Agg'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download exact A6 full 595-frame optimized map, RGBD and measured poses
+        uses: actions/download-artifact@v4
+        with:
+          name: a6-full-tum-graph-geometric-evidence
+          run-id: 41444730029
+          github-token: ${{ github.token }}
+          path: .
+      - name: Install official pretrained YOLOE26x-seg + true 3D map renderer
+        run: |
+          set -euo pipefail
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test]' 'ultralytics>=8.4.12' matplotlib trimesh
+          python -m py_compile scripts/b5_export_full_tum_semantic_map.py \
+            scripts/b5_render_semantic_map.py
+          python -m pytest -q tests/test_shared_rgbd_geometry_b.py \
+            tests/test_short_term_semantics_b.py
+      - name: FULL 595 real RGB-D, same 119 YOLOE26x keyframes; export actual 3D observations
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="src:scripts"
+          python -u scripts/b5_export_full_tum_semantic_map.py \
+            --data data/tum --poses results/a6/optimized_full_poses.json \
+            --out results/b5 --weights yoloe-26x-seg.pt \
+            --device cpu --stride 5 2>&1 | tee b5_full_inference.log
+          python -u scripts/b5_render_semantic_map.py \
+            --geometry results/a6/optimized_geometry/tsdf_cloud.ply \
+            --objects results/b5/b5_semantic_pointcloud.npz \
+            --observations results/b5/b5_object_observations.jsonl \
+            --report results/b5/b1_full_tum_report.json \
+            --out results/b5/semantic_map_highlighted.png \
+            2>&1 | tee b5_render.log
+          python - <<'PY'
+          from pathlib import Path
+          import json,numpy as np
+          p=Path("results/b5")
+          r=json.loads((p/"b1_full_tum_report.json").read_text())
+          metadata=json.loads((p/"semantic_map_metadata.json").read_text())
+          entries=[json.loads(x) for x in (p/"b5_object_observations.jsonl").read_text().splitlines()]
+          cloud=np.load(p/"b5_semantic_pointcloud.npz")
+          assert r["counts"]["rgbd_frames_processed"]==595
+          assert r["counts"]["detector_keyframes"]==119
+          assert r["counts"]["3d_observations"]==len(entries)>600
+          assert len(cloud["xyz"])==len(cloud["labels"])==len(cloud["confidence"])>20000
+          assert metadata["tsdf_points"]>=10000
+          assert (p/"semantic_map_highlighted.png").stat().st_size>100_000
+          assert (p/"semantic_map_colored.ply").stat().st_size>200_000
+          assert not metadata["not_physical_instance_count"] is False
+          assert r["ground_truth_used_for_pose"] is False
+          print("B5_TRUE_SEMANTIC_MAP_PASS",{
+             "full_RGBD":595,"YOLO_keyframes":119,
+             "observations":len(entries),
+             "map_surface_points":metadata["tsdf_points"],
+             "semantic_points":len(cloud["xyz"]),
+             "classes":list(metadata["class_observation_counts"])},flush=True)
+          PY
+      - name: Upload original semantic geometry, static map visualization and raw observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b5-real-TUM-RTABMap-YOLOE26x-semantic-map
+          path: |
+            results/b5/
+            b5_full_inference.log
+            b5_render.log
+          if-no-files-found: warn
+          retention-days: 30
