@@ -1,0 +1,77 @@
+name: EXP-20261102-05 Balanced modality-hard RGB-D evaluation
+on:
+  push:
+    branches: ['experiments/fundamental-spatial-representations-*']
+    paths:
+      - 'research/fundamental/modality_negative_symmetry.py'
+      - '.github/workflows/real-rgbd-modality-symmetry.yml'
+  pull_request:
+    branches: ['feature/semantic-memory-mapping']
+    paths:
+      - 'research/fundamental/modality_negative_symmetry.py'
+      - '.github/workflows/real-rgbd-modality-symmetry.yml'
+  workflow_dispatch:
+jobs:
+  modality-symmetry:
+    strategy:
+      fail-fast: false
+      matrix:
+        dataset: ['tum_xyz', 'tum_desk', 'bonn_box']
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install numerical tools
+        run: python -m pip install 'numpy>=1.24,<3' 'scipy>=1.10,<2' opencv-python-headless
+      - name: Download original measured RGB-D and GT trajectory
+        shell: bash
+        run: |
+          mkdir -p data
+          if [[ '${{ matrix.dataset }}' == 'tum_xyz' ]]; then
+            URL='https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.tgz'
+          elif [[ '${{ matrix.dataset }}' == 'tum_desk' ]]; then
+            URL='https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_desk.tgz'
+          else
+            URL='https://www.ipb.uni-bonn.de/html/projects/rgbd_dynamic2019/rgbd_bonn_moving_obstructing_box.zip'
+          fi
+          if [[ '${{ matrix.dataset }}' == 'bonn_box' ]]; then
+            curl --fail --location --retry 3 --max-time 1000 --output data/recording.zip "$URL"
+            unzip -q data/recording.zip -d data
+          else
+            curl --fail --location --retry 3 --max-time 1000 --output data/recording.tgz "$URL" || \
+            curl --fail --location --retry 3 --max-time 1000 --output data/recording.tgz "${URL/cvg.cit.tum.de/vision.in.tum.de}"
+            tar -xzf data/recording.tgz -C data
+          fi
+          find data -maxdepth 5 -name rgb.txt
+          test -n "$(find data -maxdepth 5 -name groundtruth.txt -print -quit)"
+      - name: Run pre-registered 4 negative distributions and 6 spatial descriptors
+        shell: bash
+        run: |
+          ROOT=$(dirname "$(find data -maxdepth 5 -name rgb.txt -print -quit)")
+          python research/fundamental/modality_negative_symmetry.py \
+            --root "$ROOT" --dataset '${{ matrix.dataset }}' --n 76 --queries 32
+      - name: Verify no generated/simulated observations and complete metrics
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,pathlib
+          dataset='${{ matrix.dataset }}'
+          p=pathlib.Path('results/real_rgbd/modal_hardness')/(dataset+'.json')
+          o=json.loads(p.read_text())
+          assert o['n_query_points']>=75
+          assert len(o['results'])==6
+          for m,rows in o['results'].items():
+              assert all(0<=rows[policy]['rank1']<=1
+                  for policy in ('random','color_hard','geometry_hard','balanced_hard'))
+          print('PASS EXP05:',dataset,o['n_query_points'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exp05-${{ matrix.dataset }}-all-negative-policies
+          path: results/real_rgbd/modal_hardness/
+          if-no-files-found: warn
+          retention-days: 30
