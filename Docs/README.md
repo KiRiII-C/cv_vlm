@@ -29,7 +29,7 @@
 | A8 | Независимая релокализация TUM desk→desk2 при трёх начальных позах, включая +8 м/180° и отсутствие сохранённой позы | **FULL DATASET PASS**: 595-карты + 3×639 query, 25–26 успешных событий, 1.9–2.3 см расхождение между прогонами; GT-relative RPE 6–7 см; глобальная абсолютная точность NOT_VALIDATED | [A8](experiments/A8_prior_sensitivity.md) |
 | B0 | Shared organized RGB-D depth / camera cloud и reprojection без двойной проекции | **FULL_REAL_TUM_TECHNICAL_PASS**: 595/595 обработано, 594 позы A6, 593 reprojection, parity errors=0 | [B0–B2](experiments/B0_B1_B2_perception_and_short_tracks.md) |
 | B1 | YOLOE-26s masks → реальные 3D наблюдения → short-term IDs на полных TUM depth кадрах | **FULL_DEPTH_PIPELINE_PASS**: 595 depth, 119 YOLO keyframes, 908 масок, 863 3D наблюдения, 94 tracklets; physical ID NOT_VALIDATED | [B0–B2](experiments/B0_B1_B2_perception_and_short_tracks.md) |
-| B1-X | Сравнение YOLOE-26x / 26s на одинаковых 595 depth + 119 YOLO keyframes | RUNNING — официальный YOLOE-26x CPU, отдельное измерение скорости и масок | [B0–B2](experiments/B0_B1_B2_perception_and_short_tracks.md) |
+| B1-X | Сравнение официальных YOLOE-26x и 26s на одинаковых 595 RGB-D кадрах и 119 keyframes | **CPU_FULL_DATASET_PASS**: 26s 97.17 мс, 863 3D наблюдения; 26x 724.24 мс, 871 наблюдение; physical GT для TUM отсутствует | [B1-X](experiments/B1x_YOLOE26s_vs_26x_full_tum.md) |
 | B2 | Короткий 3D tracking по физическим GT ID на 3×100 Hypersim кадрах с настоящими YOLOE-26x предсказаниями | **GT_PHYSICAL_ID_FAIL**: pooled IDF1 13.59% 3D, 14.50% + HSV; геометрия Hypersim GT, не RTAB-Map | [B0–B2](experiments/B0_B1_B2_perception_and_short_tracks.md) |
 
 
