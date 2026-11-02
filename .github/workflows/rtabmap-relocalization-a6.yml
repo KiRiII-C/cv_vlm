@@ -1,0 +1,245 @@
+name: A6-L blind restart relocalization on FULL TUM RGB-D
+
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - .github/workflows/rtabmap-relocalization-a6.yml
+      - scripts/full_tum_relocalize_a6.py
+      - scripts/monitor_relocalization_a6.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  blind-relocalize-full-tum:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout isolated experimental branch
+        uses: actions/checkout@v4
+
+      - name: Build reproducible ROS 2 Jazzy RTAB-Map Docker
+        run: |
+          set -euo pipefail
+          docker build -t cv-vlm:jazzy-a6loc . > docker_a6loc_build.log 2>&1 || {
+            tail -100 docker_a6loc_build.log
+            exit 1
+          }
+          tail -12 docker_a6loc_build.log
+
+      - name: Replay every TUM RGB-D frame and record RTAB-Map OdomInfo
+        env:
+          ROS_DOMAIN_ID: '64'
+        run: |
+          set -euo pipefail
+          mkdir -p results/a6_map
+          docker run --rm --env ROS_DOMAIN_ID="$ROS_DOMAIN_ID" \
+            -v "$PWD:/workspace" --workdir /workspace \
+            cv-vlm:jazzy-a6loc bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+              export ROS_LOCALHOST_ONLY=1
+              export OMP_NUM_THREADS=2
+              export OPENBLAS_NUM_THREADS=2
+              export PYTHONUNBUFFERED=1
+              python3 -m py_compile scripts/tum_full_replay_a4.py
+              python3 scripts/tum_full_replay_a4.py --manifest-only \
+                --data data/tum --output results/a6_map/input_manifest.json
+              ros2 run rtabmap_odom rgbd_odometry --ros-args \
+                -p frame_id:=camera_color_optical_frame \
+                -p subscribe_rgbd:=true \
+                -p publish_tf:=true \
+                -p always_process_most_recent_frame:=false \
+                -p output_queue_size:=10 \
+                -r rgbd_image:=/camera/rgbd_image \
+                -r odom:=/odom \
+                -r odom_info_lite:=/odom_info_lite \
+                > results/a6_map/odom.log 2>&1 &
+              ODOM_PID=$!
+              ros2 run rtabmap_slam rtabmap --ros-args \
+                -p frame_id:=camera_color_optical_frame \
+                -p subscribe_rgbd:=true \
+                -p subscribe_depth:=true \
+                -p subscribe_odom_info:=false \
+                -p publish_tf:=false \
+                -p database_path:=/workspace/results/a6_map/rtabmap.db \
+                -r rgbd_image:=/camera/rgbd_image \
+                -r odom:=/odom > results/a6_map/slam.log 2>&1 &
+              SLAM_PID=$!
+              cleanup() {
+                kill -INT "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+                sleep 4
+                kill -TERM "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+                wait "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+              }
+              trap cleanup EXIT
+              sleep 6
+              python3 -u scripts/tum_full_replay_a4.py \
+                --data data/tum --output results/a6_map/full_sequence.json \
+                --max-rate-hz 15 --ack-timeout-s 5 \
+                > results/a6_map/replay.log 2>&1 || {
+                  tail -65 results/a6_map/replay.log
+                  tail -65 results/a6_map/odom.log
+                  tail -35 results/a6_map/slam.log
+                  exit 1
+                }
+              tail -30 results/a6_map/replay.log
+              sleep 4
+              python3 -u scripts/rtabmap_graph_export_a3.py \
+                --service /rtabmap/get_map_data \
+                --output results/a6_map/pose_graph_service.json \
+                --timeout 60 --min-nodes 8 \
+                > results/a6_map/graph_export.log 2>&1 || {
+                  tail -30 results/a6_map/graph_export.log
+                  echo "Graph export unavailable; no claim of loop closure quality"
+                }
+            ' 2>&1 | tee results/a6_map/container.log
+
+      - name: Validate complete frame coverage and diagnostics
+        run: |
+          set -euo pipefail
+          sudo chmod -R a+rwX results/a6_map
+          python3 - <<'PY'
+          import json,sqlite3
+          from pathlib import Path
+          root=Path("results/a6_map")
+          manifest=json.loads((root/"input_manifest.json").read_text())
+          report=json.loads((root/"full_sequence.json").read_text())
+          assert manifest["frame_stride"]==1 and manifest["max_frames"] is None
+          assert manifest["all_paired_frames_selected"] is True
+          assert report["published_frames"]==manifest["synchronized_rgbd_pairs"]
+          assert report["odominfo_ack_frames"]==report["published_frames"]
+          assert report["source_rgb_frames"]>=report["published_frames"]>150
+          assert report["GT_used_as_input"] is False
+          assert report["odominfo_lost_true_count"]+report["odominfo_lost_false_count"]==report["odominfo_ack_frames"]
+          database=root/"rtabmap.db"
+          assert database.exists() and database.stat().st_size>4096
+          with sqlite3.connect(database) as conn:
+              n=conn.execute("SELECT COUNT(*) FROM Node").fetchone()[0]
+              assert n>=2
+          report["rtabmap_database_nodes"]=n
+          report["experiment_scope"]="ALL_AVAILABLE_RGB_DEPTH_PAIRS_NO_SUBSAMPLING"
+          (root/"full_sequence.json").write_text(json.dumps(report,indent=2)+"\n")
+          print("A4_COMPLETE_FULL_DATASET",{
+            "pairs":report["published_frames"],
+            "odominfo_ack":report["odominfo_ack_frames"],
+            "rtabmap_lost":report["odominfo_lost_true_count"],
+            "rtabmap_success":report["odominfo_lost_false_count"],
+            "technical_valid":report["numerically_valid_odom"],
+            "db_nodes":n})
+          PY
+
+      - name: Reboot odometry and RTAB-Map in localization mode; replay full shifted sequence
+        env:
+          ROS_DOMAIN_ID: '78'
+        run: |
+          set -euo pipefail
+          mkdir -p results/a6loc
+          test -s results/a6_map/rtabmap.db
+          docker run --rm --env ROS_DOMAIN_ID="$ROS_DOMAIN_ID" \
+            -v "$PWD:/workspace" --workdir /workspace \
+            cv-vlm:jazzy-a6loc bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              export RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_LOCALHOST_ONLY=1
+              export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 PYTHONUNBUFFERED=1
+              python3 -m py_compile scripts/full_tum_relocalize_a6.py scripts/monitor_relocalization_a6.py
+              ros2 run rtabmap_odom rgbd_odometry --ros-args \
+                -p frame_id:=camera_color_optical_frame \
+                -p subscribe_rgbd:=true -p publish_tf:=true \
+                -p always_process_most_recent_frame:=false \
+                -r rgbd_image:=/camera/rgbd_image -r odom:=/odom \
+                -r odom_info_lite:=/odom_info_lite \
+                > results/a6loc/odom.log 2>&1 &
+              ODOM_PID=$!
+              ros2 run rtabmap_slam rtabmap --ros-args \
+                -p frame_id:=camera_color_optical_frame \
+                -p subscribe_rgbd:=true -p subscribe_depth:=true \
+                -p subscribe_odom_info:=false -p publish_tf:=true \
+                -p pub_loc_pose_only_when_localizing:=true \
+                -p database_path:=/workspace/results/a6_map/rtabmap.db \
+                -p "Mem/IncrementalMemory:='"false"'" \
+                -p "Mem/LocalizationReadOnly:='"true"'" \
+                -p "RGBD/StartAtOrigin:='"true"'" \
+                -r rgbd_image:=/camera/rgbd_image -r odom:=/odom \
+                > results/a6loc/slam.log 2>&1 &
+              SLAM_PID=$!
+              python3 -u scripts/monitor_relocalization_a6.py \
+                --out results/a6loc > results/a6loc/monitor.log 2>&1 &
+              MON_PID=$!
+              cleanup() {
+                kill -TERM "$MON_PID" 2>/dev/null || true
+                kill -INT "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+                sleep 4
+                kill -TERM "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+                wait "$MON_PID" "$SLAM_PID" "$ODOM_PID" 2>/dev/null || true
+              }
+              trap cleanup EXIT
+              sleep 8
+              python3 -u scripts/full_tum_relocalize_a6.py \
+                --data data/tum --output results/a6loc/full_revisit.json \
+                --cyclic-start 297 --max-rate-hz 15 --ack-timeout-s 5 \
+                > results/a6loc/revisit.log 2>&1 || {
+                  tail -45 results/a6loc/revisit.log
+                  tail -40 results/a6loc/slam.log
+                  exit 1
+                }
+              sleep 10
+              kill -TERM "$MON_PID" 2>/dev/null || true
+              wait "$MON_PID" 2>/dev/null || true
+              tail -8 results/a6loc/revisit.log
+              tail -15 results/a6loc/monitor.log
+            ' 2>&1 | tee results/a6loc/container.log
+
+      - name: Validate full coverage and genuine RTAB-Map relocalization events
+        run: |
+          set -euo pipefail
+          sudo chmod -R a+rwX results/a6_map results/a6loc
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("results/a6loc")
+          first=json.loads(Path("results/a6_map/input_manifest.json").read_text())
+          report=json.loads((root/"full_revisit.json").read_text())
+          manifest=json.loads((root/"revisit_manifest.json").read_text())
+          assert manifest["cyclic_start_original_index"]==297
+          assert manifest["all_pairs_replayed_exactly_once"] is True
+          assert report["published_frames"]==first["synchronized_rgbd_pairs"]==595
+          assert report["odominfo_ack_frames"]==595
+          def read(name):
+              p=root/(name+".jsonl")
+              return [json.loads(s) for s in p.read_text().splitlines() if s.strip()]
+          info=read("info");pose=read("localization_pose");tf=read("map_odom_tf")
+          global_hits=[x for x in info if x["loop_closure_id"]>0]
+          proximity_hits=[x for x in info if x["proximity_detection_id"]>0]
+          ok=bool((global_hits or proximity_hits) and pose and tf)
+          result={"source":"LIVE_RTABMAP_EVENTS","dataset_pairs":595,
+             "start_original_index":297,"no_external_initial_pose":True,
+             "database_last_pose_disabled":"RGBD/StartAtOrigin=true",
+             "accepted_global_hits":len(global_hits),
+             "accepted_proximity_hits":len(proximity_hits),
+             "localization_pose_published":len(pose),
+             "map_to_odom_samples":len(tf),
+             "same_recording_revisited":True,
+             "cyclic_wrap_is_teleport":True,
+             "status":"SMOKE_PASS_NOT_INDEPENDENT" if ok else "NOT_CONFIRMED"}
+          (root/"relocalization_report.json").write_text(json.dumps(result,indent=2)+"\n")
+          print("A6_RELOCALIZATION",result)
+          assert ok,result
+          PY
+
+      - name: Upload FULL dataset evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a6-full-tum-blind-relocalization
+          path: |
+            results/a6_map/
+            results/a6loc/
+            docker_a6loc_build.log
+          if-no-files-found: warn
+          retention-days: 30
