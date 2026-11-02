@@ -68,7 +68,7 @@ def main():
     # Draw exactly 960 training positive pairs per epoch; same 15 batch updates.
     for ep in range(args.epochs):
         model.train()
-        inds=torch.randperm(len(X))[:960]
+        inds=torch.randint(0,len(X),(960,))  # enforce exactly 15 minibatches also for one-scene arm
         hindices=torch.randperm(len(H[0]))
         total=0
         for step,idx in enumerate(inds.split(64)):
