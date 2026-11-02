@@ -16,7 +16,14 @@ from pathlib import Path
 
 import numpy as np
 from scipy.spatial.transform import Rotation
-from semantic_map.tum_yolo_pipeline import parse
+def parse(path):
+    rows=[]
+    for line in Path(path).read_text().splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        parts=line.split()
+        rows.append((float(parts[0]),parts[1:]))
+    return rows
 
 MODES=("first_node","saved_last","wrong_8m")
 
