@@ -6,6 +6,7 @@ on:
       - experiments/rtabmap-geometry-a0-20261031
     paths:
       - scripts/tum_full_replay_a4.py
+      - scripts/evaluate_full_tum_odominfo_a5.py
       - .github/workflows/rtabmap-full-tum-a4.yml
       - tests/test_tum_full_replay_a4.py
   workflow_dispatch:
@@ -133,6 +134,46 @@ jobs:
             "db_nodes":n})
           PY
 
+      - name: A5 evaluate framewise RTAB-Map OdomInfo against TUM reference
+        run: |
+          set -euo pipefail
+          mkdir -p results/a5
+          docker run --rm \
+            -v "$PWD:/workspace" --workdir /workspace \
+            cv-vlm:jazzy-a4 bash -lc '
+              set -eo pipefail
+              source /opt/ros/jazzy/setup.bash
+              export OMP_NUM_THREADS=2
+              export OPENBLAS_NUM_THREADS=2
+              python3 -m py_compile scripts/evaluate_full_tum_odominfo_a5.py
+              python3 -u scripts/evaluate_full_tum_odominfo_a5.py \
+                --root results/a4 \
+                --gt data/tum/rgbd_dataset_freiburg1_desk/groundtruth.txt \
+                --out results/a5
+            ' 2>&1 | tee results/a5/evaluation.log
+          sudo chmod -R a+rwX results/a5
+          python3 - <<'PY'
+          import csv,json,math
+          from pathlib import Path
+          root=Path("results/a5")
+          d=json.loads((root/"odometry_predictive_report.json").read_text())
+          with (root/"per_frame_pose_error.csv").open() as stream:
+              rows=list(csv.DictReader(stream))
+          assert d["ground_truth_used_by_SLAM"] is False
+          assert d["published_full_dataset"]==595, d
+          assert d["diagnosed_frames"]==595, d
+          assert d["number_of_groundtruth_matched_poses"]==len(rows)==594, d
+          assert d["internal_lost_true"]==0
+          assert math.isfinite(d["ate_all"]["rmse"])
+          assert d["relative_step_translation_rpe"]["n"]>500
+          assert d["relative_step_rotation_rpe_deg"]["n"]>500
+          print("A5_EVALUATION_VALIDATED",
+                {"poses":len(rows),"ATE_RMSE_m":d["ate_all"]["rmse"],
+                 "RPE_translation_RMSE_m":d["relative_step_translation_rpe"]["rmse"],
+                 "RPE_rotation_RMSE_deg":d["relative_step_rotation_rpe_deg"]["rmse"],
+                 "bad_ATE":d["fixed_untrained_predictive_scores"]["ate_m"]["positives"]})
+          PY
+
       - name: Upload FULL dataset evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -140,6 +181,7 @@ jobs:
           name: a4-full-tum-rgbd-odominfo
           path: |
             results/a4/
+            results/a5/
             docker_a4_build.log
           if-no-files-found: warn
           retention-days: 30
