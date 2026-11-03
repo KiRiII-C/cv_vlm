@@ -51,8 +51,8 @@ def label_mesh_vertices(verts, source_points, source_colors, class_rgb,
     if len(points)==0:
         return result
     # One source RGB must correspond to exactly one configured class.
-    color_sq=((cols.astype(np.int16)[:,None,:]-
-               class_rgb.astype(np.int16)[None,:,:])**2).sum(axis=2)
+    color_sq=((cols.astype(np.int32)[:,None,:]-
+               class_rgb.astype(np.int32)[None,:,:])**2).sum(axis=2)
     idx=np.argmin(color_sq,axis=1)
     if not np.all(np.min(color_sq,axis=1)<=3):
         raise ValueError("D1 semantic point colors do not match configured classes")
