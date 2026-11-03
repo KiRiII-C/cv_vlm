@@ -1,0 +1,192 @@
+name: D3 Replica office0 matched-source OVI-style geometry regions
+on:
+  push:
+    branches: [experiments/rtabmap-geometry-a0-20261031]
+    paths:
+      - scripts/d3_replica_office0_mesh_patches.py
+      - tests/test_d3_replica_mesh_patches.py
+      - .github/workflows/d3-replica-office0-mesh.yml
+      - Docs/experiments/D3_replica_office0_protocol.md
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  replica-office0:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 140
+    env:
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '3'
+      MPLBACKEND: 'Agg'
+      PYTHONPATH: src:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install official YOLOE-26x CPU, Open3D TSDF, geometry and visualization
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test]' 'ultralytics>=8.4.12' \
+             'numpy>=1.26,<2' 'scipy>=1.12,<2' 'opencv-python-headless<4.12' \
+             matplotlib open3d==0.19.0 trimesh plotly
+          python -m py_compile scripts/d3_replica_office0_mesh_patches.py
+          python -m unittest discover -s tests -p test_d3_replica_mesh_patches.py -v
+      - name: Download ORIGINAL subset of NICE-SLAM Replica office0 (research only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/replica
+          curl --fail --location --retry 3 --connect-timeout 25 --max-time 2100 \
+            -o data/replica/office0.tar \
+            'https://huggingface.co/datasets/helioom/3dvlm-replica_subset/resolve/main/replica/office0.tar?download=true'
+          tar -tf data/replica/office0.tar | head -n 15 || true
+          tar -xf data/replica/office0.tar -C data/replica
+          find data/replica -name depth.npy -print
+          python - <<'PY'
+          import json,numpy as np
+          from pathlib import Path
+          found=list(Path('data/replica').rglob('depth.npy'))
+          if len(found)!=1:
+            raise RuntimeError(f'Expected single office0 dataset: {found}')
+          p=found[0].parent
+          assert (p/'images').exists()
+          a=np.load(p/'depth.npy',mmap_mode='r')
+          assert a.shape==(100,680,1200)
+          assert (p/'meta.json').is_file()
+          print('D3_ORIGINAL_REPLICA_OFFICE0_RGBD_SOURCE',p,a.shape,flush=True)
+          Path('data/replica/scene_path.txt').write_text(str(p))
+          PY
+      - name: Reconstruct two stage real-data oracle TSDF, holdout depth check, geometric patches, YOLOE surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCENE=$(cat data/replica/scene_path.txt)
+          python -u scripts/d3_replica_office0_mesh_patches.py \
+            --scene "$SCENE" --out results/d3/replica_office0 \
+            --voxel .025 --max-depth 7 --confidence .35 \
+            --inference-step 10 2>&1 | tee d3_replica.log
+      - name: Fail closed on source provenance and 3D artifact incompleteness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('results/d3/replica_office0')
+          r=json.loads((p/'d3_metrics.json').read_text())
+          assert r['complete_subset_frames']==100
+          assert r['original_rgbd_frames_fused']==100
+          assert r['synthetic_rendered_dataset_not_physical_sensor']
+          assert r['camera_poses_from_dataset_ORACLE']
+          assert not r['RTABMap_run']
+          assert r['even_training_frames']==50
+          assert r['odd_frames_held_out_for_geometry_nn']==50
+          assert r['geometry_heldout_depth_distance']['heldout_frame_count']==50
+          assert r['YOLOE_inference_frames']==10
+          assert r['mesh']['full_mesh_faces']>30000
+          assert r['class_agnostic_patch_stats']['class_agnostic']
+          assert not r['class_agnostic_patches_are_physical_instances']
+          assert r['original_GT_instance_accuracy']=='NOT_EVALUATED'
+          assert r['actual_OVI_MAP_runtime_or_accuracy_comparison'].startswith('NOT_EVALUATED')
+          for name,size in (
+            ('rgb_mesh.ply',50000),('semantic_mesh.ply',50000),
+            ('rgb_mesh.glb',50000),('semantic_mesh.glb',50000),
+            ('interactive_office0.html',40000),
+            ('replica_office0_three_modes.png',50000),
+            ('mesh_patch_and_semantic_labels.npz',20000)):
+            f=p/name
+            if not f.is_file() or f.stat().st_size<size:
+              raise RuntimeError(f'D3 missing a real map: {name}')
+          print('D3_REPLICA_OFFICE0_VERIFIED',r['mesh'],
+                r['geometry_heldout_depth_distance'],
+                r['class_agnostic_patch_stats'],flush=True)
+          PY
+      - name: Upload full Replica office0 triangle meshes, 3-layer viewer and honest metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: D3-REPLICA-OFFICE0-REAL-SOURCE-MESH-THREE-LAYERS
+          path: |
+            results/d3/replica_office0/
+            d3_replica.log
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 5
+      - name: Publish reproducible evidence and visualization to research branch
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p Docs/maps
+          python - <<'PY'
+          from pathlib import Path
+          import json,os,shutil
+          p=Path('results/d3/replica_office0')
+          r=json.loads((p/'d3_metrics.json').read_text())
+          out=Path('Docs/maps')
+          shutil.copyfile(p/'replica_office0_three_modes.png',
+                          out/'D3_replica_office0_three_modes.png')
+          (out/'D3_replica_office0_metrics.json').write_text(
+             json.dumps(r,ensure_ascii=False,indent=2)+'\n')
+          run=os.environ['GITHUB_RUN_ID']
+          g=r['geometry_heldout_depth_distance']
+          m=r['mesh'];pt=r['class_agnostic_patch_stats']
+          s=f"""# D3 — Replica office0: reconstruction, geometric patches, YOLOE semantics
+
+**Status:** verified real source of photo-realistic Replica RGB-D renders, 100 / 100 images.
+[GitHub Actions run {run}](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).
+**This is NOT RTAB-Map and does not report an OVI-MAP inference comparison.**
+Input camera poses are GT oracle and the sequence is computer-rendered, not from a real RGB-D sensor.
+
+![Three-way Replica office0 mesh](D3_replica_office0_three_modes.png)
+
+| Metric | Result |
+|---|---:|
+| Original rendered RGB-D images | {r['original_rgbd_frames_fused']} |
+| 3D mesh faces | {m['full_mesh_faces']} |
+| Mesh vertices | {m['full_mesh_vertices']} |
+| YOLOE-26x inference frames | {r['YOLOE_inference_frames']} |
+| Observed YOLOE class masks | {r['YOLOE_valid_object_masks']} |
+| Independent class-agnostic geometric surface patches | {pt['displayed_geometric_regions']} |
+| Mesh surface patch face coverage | {100*m['class_independent_patch_fraction']:.2f}% |
+| Mesh vertex YOLOE category support | {100*m['semantic_supported_fraction']:.2f}% |
+| Held-out odd camera frames | {g['heldout_frame_count']} |
+| Median odd-depth-to-even-mesh nearest vertex | {g['median_nn_vertex_m']:.4f} m |
+| 95th percentile odd-depth-to-even-mesh nearest vertex | {g['p95_nn_vertex_m']:.4f} m |
+| Held-out sensor-depth points within 5cm of even-frame mesh | {100*g['coverage_5cm']:.2f}% |
+
+**Critical distinction:** patches are geometric surface regions, NOT verified object instances or physical UUIDs.
+YOLOE labels are model predictions and not instance-level or open-set SigLIP scores.
+The 50 odd frames were held out of the first 50-even-frame TSDF for the sensor
+consistency proxy, then integrated into the final 100-frame mesh.
+
+**Artifacts:** `rgb_mesh.ply`, `rgb_mesh.glb`, `semantic_mesh.ply`,
+`semantic_mesh.glb`, `mesh_patch_and_semantic_labels.npz`,
+`interactive_office0.html`, and metrics in the
+[run artifacts](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).
+
+**Limitations:** the nearest mesh-vertex check is not independent 3D GT; the
+reference screenshot in OVI-MAP may use GT-mesh vertex transfer; this is
+an intentionally restricted 100-frame subset, whereas the official example
+uses longer sequences. No physical-instance GT, direct OVI result, SLAM ATE,
+relocalization, or Nav2 safety was evaluated.
+
+**Next work:** on the same 100 frames evaluate class-agnostic instance
+segmentation with 3D GT class/instance labels, add per-object view-selected
+text embeddings and motion-aware long-term memory. Render isolated object meshes
+in a separate layer to compare identity consistency.
+"""
+          (out/'D3_replica_office0_results.md').write_text(s)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Docs/maps/D3_*
+          git commit -m 'Publish real Replica office0 3-layer TSDF map and heldout-depth metrics'
+          git fetch origin experiments/rtabmap-geometry-a0-20261031
+          git rebase origin/experiments/rtabmap-geometry-a0-20261031
+          git push origin HEAD:experiments/rtabmap-geometry-a0-20261031
