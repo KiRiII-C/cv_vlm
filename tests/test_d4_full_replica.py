@@ -55,6 +55,29 @@ class TestOfficialReplicaReconstruction(unittest.TestCase):
         np.testing.assert_allclose(res["z"],2.,rtol=1e-5,atol=1e-5)
         self.assertTrue(np.all(np.isfinite(res["rgb"])))
 
+    def test_rotated_camera_raycast_returns_optical_z_not_wrong_rotation_column(self):
+        import open3d as o3d
+        from scipy.spatial.transform import Rotation
+        angle=Rotation.from_euler("y",38,degrees=True).as_matrix()
+        w2c=np.eye(4)
+        w2c[:3,:3]=angle
+        w2c[:3,3]=[.4,-.2,.1]
+        camera_vertices=np.array([[-1,-1,2],[1,-1,2],[1,1,2],[-1,1,2]],np.float32)
+        world_vertices=(camera_vertices-w2c[:3,3])@w2c[:3,:3]
+        faces=np.array([[0,1,2],[0,2,3]],np.int32)
+        colors=np.ones((4,3),np.float32)
+        mesh=o3d.geometry.TriangleMesh()
+        mesh.vertices=o3d.utility.Vector3dVector(world_vertices.astype(float))
+        mesh.triangles=o3d.utility.Vector3iVector(faces)
+        mesh.vertex_colors=o3d.utility.Vector3dVector(colors.astype(float))
+        scene=o3d.t.geometry.RaycastingScene()
+        scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(mesh))
+        K=np.array([[90,0,1.5],[0,90,1.5],[0,0,1]],np.float32)
+        res=cast_with_scene(scene,world_vertices.astype(np.float32),faces,colors,
+                            K,w2c.astype(np.float32),4,4)
+        self.assertTrue(res["hit"].all())
+        np.testing.assert_allclose(res["z"],2.,rtol=1e-4,atol=1e-4)
+
     def test_groundtruth_poses_are_not_slam_outputs(self):
         # D4 uses inverse of an original GT c2w camera matrix.
         cam=np.eye(4);cam[:3,3]=[1,2,3]
