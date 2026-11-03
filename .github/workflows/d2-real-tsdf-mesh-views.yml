@@ -1,0 +1,207 @@
+name: D2 OVI-style real RGBD TSDF surface meshes TUM Bonn
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - scripts/d2_ovi_style_tsdf_mesh.py
+      - tests/test_d2_ovi_style_tsdf_mesh.py
+      - .github/workflows/d2-real-tsdf-mesh-views.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  tsdf-mesh:
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        dataset: [tum_xyz, tum_desk2, bonn_box]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      OPENBLAS_NUM_THREADS: '2'
+      OMP_NUM_THREADS: '3'
+      MKL_NUM_THREADS: '3'
+      MPLBACKEND: 'Agg'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Open3D TSDF and real-data mesh visualization dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install 'numpy>=1.26,<2' 'scipy>=1.12,<2' opencv-python-headless matplotlib open3d==0.19.0 trimesh plotly
+          python -m py_compile scripts/d2_ovi_style_tsdf_mesh.py
+          PYTHONPATH=scripts python -m unittest discover -s tests -p 'test_d2_ovi_style_tsdf_mesh.py' -v
+      - name: Download D1 semantic measurements from REAL YOLOE 26x inference — NO repeated detector inference
+        uses: actions/download-artifact@v4
+        with:
+          name: d1-map-${{ matrix.dataset }}
+          run-id: 41594963441
+          github-token: ${{ github.token }}
+          path: results/d1/${{ matrix.dataset }}
+      - name: Fetch full original RGB-D depth+color sequences, same GT camera poses as D1
+        shell: bash
+        env:
+          DATASET: ${{ matrix.dataset }}
+        run: |
+          set -euo pipefail
+          mkdir -p data/d2
+          if [[ "$DATASET" == "tum_xyz" || "$DATASET" == "tum_desk2" ]]; then
+            if [[ "$DATASET" == "tum_xyz" ]]; then PART="xyz"; else PART="desk2"; fi
+            SRC="rgbd_dataset_freiburg1_${PART}"
+            curl --fail --location --retry 3 --connect-timeout 20 --max-time 1000 \
+              --output data/d2/source.tgz "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/${SRC}.tgz" || \
+            curl --fail --location --retry 3 --connect-timeout 20 --max-time 1000 \
+              --output data/d2/source.tgz "https://vision.in.tum.de/rgbd/dataset/freiburg1/${SRC}.tgz" || \
+            curl --fail --location --retry 3 --connect-timeout 20 --max-time 1000 \
+              --output data/d2/source.tgz "https://webshare.cvg.cit.tum.de/rgbd/dataset/freiburg1/${SRC}.tgz"
+            tar -xzf data/d2/source.tgz -C data/d2
+            echo "D2_ROOT=data/d2/${SRC}" >> "$GITHUB_ENV"
+          else
+            curl --fail --location --retry 3 --connect-timeout 20 --max-time 1000 \
+              --output data/d2/source.zip \
+              'https://www.ipb.uni-bonn.de/html/projects/rgbd_dynamic2019/rgbd_bonn_moving_obstructing_box.zip'
+            unzip -q data/d2/source.zip -d data/d2
+            ROOT=$(dirname "$(find data/d2 -maxdepth 6 -name rgb.txt -print -quit)")
+            echo "D2_ROOT=$ROOT" >> "$GITHUB_ENV"
+          fi
+          test -n "$(find data/d2 -maxdepth 6 -name depth.txt -print -quit)"
+          test -n "$(find data/d2 -maxdepth 6 -name groundtruth.txt -print -quit)"
+      - name: Reconstruct real 2cm TSDF surface with triangle faces and real RGB
+        shell: bash
+        env:
+          DATASET: ${{ matrix.dataset }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=scripts:src
+          python -u scripts/d2_ovi_style_tsdf_mesh.py \
+            --dataset "$DATASET" --root "$D2_ROOT" \
+            --semantic-source "results/d1/$DATASET" \
+            --out "results/d2/$DATASET" \
+            --frame-stride 4 --tsdf-voxel .02 --sdf-trunc .08 \
+            --max-depth 4.5 --semantic-max-dist .055 \
+            --display-triangles 40000 2>&1 | tee "d2_${DATASET}_real.log"
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          name=os.environ['DATASET'];p=Path('results/d2')/name
+          r=json.loads((p/'d2_metrics.json').read_text())
+          assert r['dataset']==name
+          assert r['known_GT_pose_used_for_integration'] is True
+          assert r['RTABMap_performed_in_D2'] is False
+          assert r['integrated_measured_RGBD_frames']>=140
+          assert r['mesh_render']['original_mesh_triangles']>=5000
+          assert r['mesh_render']['original_mesh_vertices']>=2000
+          assert r['mesh_render']['vertex_semantically_supported']>=50
+          assert r['physical_instance_labels_constructed'] is False
+          assert r['IDF1'].startswith('NOT_EVALUATED')
+          assert r['dynamic_ghosting_not_corrected'] is True
+          for file,min_size in [('rgb_mesh.ply',10000),('semantic_mesh.ply',10000),
+                                ('rgb_mesh.glb',10000),('semantic_mesh.glb',10000),
+                                ('mesh_vs_semantics.png',20000),
+                                ('mesh_interactive.html',20000),
+                                ('mesh_vertex_semantics.npz',1000)]:
+            if (p/file).stat().st_size<=min_size:
+                raise RuntimeError(f'{name} invalid actual mesh output: {file}')
+          print('D2_REAL_SURFACE_MESH_PASS',name,r['mesh_render'],flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: d2-tsdf-surface-${{ matrix.dataset }}
+          path: |
+            results/d2/${{ matrix.dataset }}/
+            d2_${{ matrix.dataset }}_real.log
+          retention-days: 30
+          compression-level: 4
+          if-no-files-found: warn
+
+  summarize:
+    needs: tsdf-mesh
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: d2-tsdf-surface-*
+          path: gathered
+          merge-multiple: false
+      - name: Publish only REAL measured three-dataset triangle mesh comparisons
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json,shutil,os
+          target=Path('Docs/maps');target.mkdir(parents=True,exist_ok=True)
+          names=['tum_xyz','tum_desk2','bonn_box'];results={}
+          for n in names:
+            container=Path('gathered')/('d2-tsdf-surface-'+n)
+            found=list(container.rglob('d2_metrics.json'))
+            if len(found)!=1:
+              raise RuntimeError(f'Missing unique real source metrics for {n}: {found}')
+            f=found[0];base=f.parent;r=json.loads(f.read_text())
+            if r['dataset']!=n or r['RTABMap_performed_in_D2'] or not r['known_GT_pose_used_for_integration']:
+              raise RuntimeError('Ground-truth pose and scene attribution mismatch')
+            if r['mesh_render']['original_mesh_triangles']<5000:
+              raise RuntimeError('Invalid triangle geometry')
+            png=base/'mesh_vs_semantics.png'
+            if not png.exists() or png.stat().st_size<20000:
+              raise RuntimeError('Missing actual reconstructed surface map')
+            shutil.copyfile(png,target/f'D2_{n}_surface.png')
+            (target/f'D2_{n}_metrics.json').write_text(json.dumps(r,ensure_ascii=False,indent=2)+'\n')
+            results[n]=r
+          run=os.environ['GITHUB_RUN_ID']
+          lines=['# D2 — OVI-MAP-inspired *mesh rendering* of real RGB-D datasets','',
+            f'**Status:** all 3 original measured RGB-D TSDF reconstruction jobs PASS. '
+            f'[GitHub Actions #{run}](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).','',
+            '**Not an OVI-MAP implementation:** this experiment borrows the meshed-surface + semantic-layer display style, '
+            'but it uses GT/mocap poses (oracle), not a new SLAM pass, and YOLOE predictions, not OVI class-agnostic IDs or VLM embeddings.','',
+            '| Dataset | Real RGB-D frames integrated | Original mesh triangles | Semantic mesh support | Semantic coverage |',
+            '|---|---:|---:|---:|---:|']
+          for n in names:
+            r=results[n];v=r['mesh_render']
+            lines.append(f'| {n} | {r["integrated_measured_RGBD_frames"]} | '
+              f'{v["original_mesh_triangles"]} | {v["vertex_semantically_supported"]} | '
+              f'{100*v["fraction_mesh_vertices_supported_by_predicted_classes"]:.2f}% |')
+          lines+=['','## Real-data reconstructed surface previews','']
+          for n in names:
+            lines += [f'### {n}','',f'![RGB-D mesh and semantic overlay for {n}](D2_{n}_surface.png)','',
+              f'Binary full-resolution mesh PLY, GLB, self-contained interactive viewer and semantic support masks: '
+              f'[{n} job artifact](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}) '
+              f'(`d2-tsdf-surface-{n}`).','']
+          lines+=['## What this experiment actually fixes','',
+            'Compared with D1 scatter-only maps: continuous TSDF triangle surfaces, real RGB colors, light shading, '
+            'side-by-side natural RGB and YOLOE semantic overlay, unknown-space abstention, and tighter camera framing.','',
+            '**Scientific limits:** TSDF zero-crossings are interpolated geometry between real observed rays; '
+            'they are not newly measured points. A smoother mesh is not evidence of more accurate geometry, '
+            'instance-ID tracking or semantics. Bonn motion ghosts remain; some geometry is unknown or poorly reconstructed. '
+            'No GT instance labels or open-set SigLIP query heatmaps were generated. '
+            'This is an oracle GT-pose visual reconstruction, not RTAB-Map ATE validation.','',
+            'To obtain true OVI-like instance maps, next implement geometry-first class-agnostic 3D instance integration '
+            'and temporal ID voting, then connect semantic embeddings via selected views. '
+            'To compare photographs with OVI figures, add a Replica/ScanNet dataset run with identical scene and pose conditions.','']
+          (target/'D2_real_TSDF_mesh_results.md').write_text('\n'.join(lines))
+          print('D2_ALL_THREE_REAL_MESHES_VERIFIED',[(n,results[n]['mesh_render']['original_mesh_triangles']) for n in names])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: D2-VERIFIED-THREE-TSDF-SURFACE-PREVIEWS
+          path: Docs/maps/D2_*
+          retention-days: 30
+      - name: Commit real-data mesh preview PNGs to research branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Docs/maps/D2_*
+          git commit -m 'Publish D2 real RGB-D TSDF triangle surface comparison maps'
+          git fetch origin experiments/rtabmap-geometry-a0-20261031
+          git rebase origin/experiments/rtabmap-geometry-a0-20261031
+          git push origin HEAD:experiments/rtabmap-geometry-a0-20261031
