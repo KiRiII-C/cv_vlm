@@ -109,7 +109,7 @@ def cast_with_scene(scene,vertices,faces,original_colors,
         origin=rays.numpy().reshape(-1,6)[idx,:3]
         direction=rays.numpy().reshape(-1,6)[idx,3:]
         hit=origin+direction*t[idx,None]
-        zcam=hit @ T[:3,2]+T[2,3]
+        zcam=hit @ T[2,:3]+T[2,3]
         out_depth[idx]=zcam
         if category is not None:
             names=category[batch]
