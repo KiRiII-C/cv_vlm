@@ -1,0 +1,41 @@
+name: D4 probe official OVI-MAP NICE-SLAM full Replica office0 source
+on:
+  push:
+    branches: ['experiments/rtabmap-geometry-a0-20261031']
+    paths: ['.github/workflows/d4-probe-full-replica.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check official full Replica archive dimensions, ranges and embedded office0 files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'remotezip>=0.12'
+          curl -sSLI --max-time 45 'https://cvg-data.inf.ethz.ch/nice-slam/data/Replica.zip' | head -n 35 || true
+          python - <<'PY'
+          import json
+          from remotezip import RemoteZip
+          url='https://cvg-data.inf.ethz.ch/nice-slam/data/Replica.zip'
+          with RemoteZip(url,initial_buffer_size=262144,timeout=180) as z:
+              allfiles=z.infolist()
+              names=[x.filename for x in allfiles]
+              relevant=[x for x in allfiles if 'office0/' in x.filename and (
+                x.filename.endswith('.jpg') or x.filename.endswith('.png')
+                or x.filename.endswith('traj.txt'))]
+              print('D4_FULL_OFFICE0_ARCHIVE_PROBE',json.dumps({
+                'total_archive_members':len(allfiles),
+                'office0_count':len(relevant),
+                'office0_sample_names':names[:12]+[x.filename for x in relevant[:12]],
+                'office0_compressed_bytes':sum(x.compress_size for x in relevant),
+                'office0_uncompressed_bytes':sum(x.file_size for x in relevant),
+                'camera_params_candidates':[x for x in names if x.endswith('cam_params.json')][:5],
+                'reference_mesh_candidates':[x for x in names if 'office0' in x and x.endswith(('.ply','.obj'))][:5],
+              },indent=2),flush=True)
+              if len(relevant)<1000:raise RuntimeError('Not full 2000-frame Replica scene')
+          PY
