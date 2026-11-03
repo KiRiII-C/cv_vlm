@@ -1,0 +1,68 @@
+{
+  "experiment": "D3_REPLICA_OFFICE0_OVI_STYLE_THREE_LAYER_MESH",
+  "source_dataset": "helioom/3dvlm-replica_subset/replica/office0.tar",
+  "original_source_family": "NICE-SLAM Replica photorealistic rendered RGB-D",
+  "research_only_license": true,
+  "synthetic_rendered_dataset_not_physical_sensor": true,
+  "complete_subset_frames": 100,
+  "camera_poses_from_dataset_ORACLE": true,
+  "RTABMap_run": false,
+  "pose_convention": "provided OpenCV world_to_camera applied directly to Open3D integration",
+  "original_rgbd_frames_fused": 100,
+  "even_training_frames": 50,
+  "odd_frames_held_out_for_geometry_nn": 50,
+  "TSDF_voxel_m": 0.025,
+  "source_YOLOE_model": "yoloe-26x-seg.pt",
+  "YOLOE_inference_frames": 10,
+  "YOLOE_valid_object_masks": 23,
+  "per_class_observation_masks": {
+    "chair": 12,
+    "potted plant": 2,
+    "sofa": 8,
+    "mouse": 1
+  },
+  "measured_semantic_mask_pixels_transformed_to_world": 69000,
+  "class_agnostic_patch_stats": {
+    "candidate_components_before_filters": 2974,
+    "displayed_geometric_regions": 40,
+    "coverage_fraction_faces": 0.9108363636363637,
+    "max_region_triangle_count": 76381,
+    "class_agnostic": true,
+    "physical_instance_ids_claimed": false
+  },
+  "class_agnostic_patch_coverage_on_full_mesh": 0.950353265068195,
+  "class_agnostic_patches_are_physical_instances": false,
+  "geometry_heldout_depth_distance": {
+    "heldout_frame_count": 50,
+    "heldout_projected_measured_points": 350000,
+    "median_nn_vertex_m": 0.009938181661130356,
+    "p95_nn_vertex_m": 0.015229547080917429,
+    "coverage_5cm": 0.9984685714285715,
+    "coverage_10cm": 0.999,
+    "metric_type": "heldout_measured_sensor_points_to_reconstructed_mesh_VERTEX_NN",
+    "not_independent_geometry_GT": true
+  },
+  "mesh": {
+    "full_mesh_vertices": 145884,
+    "full_mesh_faces": 284772,
+    "display_mesh_faces": 45000,
+    "semantic_supported_vertices": 20065,
+    "semantic_supported_fraction": 0.1375407858298374,
+    "nonzero_geometric_patch_faces": 270634,
+    "class_independent_patch_fraction": 0.950353265068195
+  },
+  "original_GT_instance_accuracy": "NOT_EVALUATED",
+  "actual_OVI_MAP_runtime_or_accuracy_comparison": "NOT_EVALUATED_NO_MATCHED_OVI_OUTPUT",
+  "limitations": "Class-agnostic mesh surface patches may split one object or join objects; YOLOE is not class-agnostic panoptic segmentation. No GT physical instance labels. Geometry metric uses a *heldout depth vs mesh vertex* proxy, not GT mesh distance. Synthetic Replica rendered room, oracle poses not RTAB-Map.",
+  "outputs": [
+    "rgb_mesh.ply",
+    "rgb_mesh.glb",
+    "semantic_mesh.ply",
+    "semantic_mesh.glb",
+    "mesh_patch_and_semantic_labels.npz",
+    "interactive_office0.html",
+    "replica_office0_three_modes.png",
+    "d3_metrics.json"
+  ],
+  "elapsed_seconds": 15.454
+}
