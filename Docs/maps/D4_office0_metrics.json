@@ -46,237 +46,237 @@
     "heldout_original_frames": 25,
     "depth_sampling_stride": 8,
     "observed_valid_depth_samples": 318580,
-    "supported_samples_by_reconstructed_mesh": 258176,
-    "raycast_depth_support_fraction": 0.8103961328394752,
-    "median_abs_sensor_depth_error_m_on_supported": 0.6982712149620056,
-    "p95_abs_sensor_depth_error_m_on_supported": 2.4733409881591797,
-    "raycast_within_5cm_fraction_on_supported": 0.03807867501239465,
-    "raycast_within_10cm_fraction_on_supported": 0.07732322136836886,
+    "supported_samples_by_reconstructed_mesh": 318123,
+    "raycast_depth_support_fraction": 0.9985655094481762,
+    "median_abs_sensor_depth_error_m_on_supported": 0.009199380874633789,
+    "p95_abs_sensor_depth_error_m_on_supported": 0.031389212608337394,
+    "raycast_within_5cm_fraction_on_supported": 0.9772257900246131,
+    "raycast_within_10cm_fraction_on_supported": 0.9850372340258328,
     "per_view": [
       {
         "original_frame": 2,
         "valid_sensor_depth_pixels": 12731,
-        "raycast_supported_pixels": 9559,
-        "fraction_depth_supported": 0.7508443955698688,
-        "median_z_abs_error_m": 0.8043241500854492,
-        "p95_z_abs_error_m": 2.404684567451478,
-        "fraction_hits_depth_residual_under_5cm": 0.035882414478501934
+        "raycast_supported_pixels": 12690,
+        "fraction_depth_supported": 0.9967795145707329,
+        "median_z_abs_error_m": 0.010824084281921387,
+        "p95_z_abs_error_m": 0.0294254422187805,
+        "fraction_hits_depth_residual_under_5cm": 0.9765169424743892
       },
       {
         "original_frame": 82,
         "valid_sensor_depth_pixels": 12726,
-        "raycast_supported_pixels": 5679,
-        "fraction_depth_supported": 0.44625176803394623,
-        "median_z_abs_error_m": 0.9037693738937378,
-        "p95_z_abs_error_m": 2.288944315910339,
-        "fraction_hits_depth_residual_under_5cm": 0.037858777953865115
+        "raycast_supported_pixels": 12697,
+        "fraction_depth_supported": 0.9977212006914977,
+        "median_z_abs_error_m": 0.008625149726867676,
+        "p95_z_abs_error_m": 0.029768753051757798,
+        "fraction_hits_depth_residual_under_5cm": 0.9834606599984248
       },
       {
         "original_frame": 162,
         "valid_sensor_depth_pixels": 12750,
-        "raycast_supported_pixels": 10444,
-        "fraction_depth_supported": 0.8191372549019608,
-        "median_z_abs_error_m": 1.0317010879516602,
-        "p95_z_abs_error_m": 2.0023284792900085,
-        "fraction_hits_depth_residual_under_5cm": 0.022117962466487937
+        "raycast_supported_pixels": 12735,
+        "fraction_depth_supported": 0.9988235294117647,
+        "median_z_abs_error_m": 0.009904146194458008,
+        "p95_z_abs_error_m": 0.03156805038452148,
+        "fraction_hits_depth_residual_under_5cm": 0.9670985473105614
       },
       {
         "original_frame": 242,
         "valid_sensor_depth_pixels": 12750,
         "raycast_supported_pixels": 12692,
         "fraction_depth_supported": 0.9954509803921568,
-        "median_z_abs_error_m": 0.49967139959335327,
-        "p95_z_abs_error_m": 0.8553300082683564,
-        "fraction_hits_depth_residual_under_5cm": 0.04695871415064608
+        "median_z_abs_error_m": 0.002269744873046875,
+        "p95_z_abs_error_m": 0.03215528130531308,
+        "fraction_hits_depth_residual_under_5cm": 0.9652537031200756
       },
       {
         "original_frame": 322,
         "valid_sensor_depth_pixels": 12750,
         "raycast_supported_pixels": 12650,
         "fraction_depth_supported": 0.9921568627450981,
-        "median_z_abs_error_m": 0.16297215223312378,
-        "p95_z_abs_error_m": 0.3331507682800292,
-        "fraction_hits_depth_residual_under_5cm": 0.15375494071146245
+        "median_z_abs_error_m": 0.010680317878723145,
+        "p95_z_abs_error_m": 0.024029767513275145,
+        "fraction_hits_depth_residual_under_5cm": 0.9774703557312253
       },
       {
         "original_frame": 402,
         "valid_sensor_depth_pixels": 12750,
         "raycast_supported_pixels": 12749,
         "fraction_depth_supported": 0.999921568627451,
-        "median_z_abs_error_m": 0.6198906898498535,
-        "p95_z_abs_error_m": 1.2095368385314935,
-        "fraction_hits_depth_residual_under_5cm": 0.0403953251235391
+        "median_z_abs_error_m": 0.01014721393585205,
+        "p95_z_abs_error_m": 0.02792401313781738,
+        "fraction_hits_depth_residual_under_5cm": 0.9879990587497058
       },
       {
         "original_frame": 482,
         "valid_sensor_depth_pixels": 12750,
         "raycast_supported_pixels": 12716,
         "fraction_depth_supported": 0.9973333333333333,
-        "median_z_abs_error_m": 0.6687628030776978,
-        "p95_z_abs_error_m": 1.0263521373271942,
-        "fraction_hits_depth_residual_under_5cm": 0.021075810003145644
+        "median_z_abs_error_m": 0.008246898651123047,
+        "p95_z_abs_error_m": 0.023540258407592773,
+        "fraction_hits_depth_residual_under_5cm": 0.9895407360805285
       },
       {
         "original_frame": 562,
         "valid_sensor_depth_pixels": 12750,
         "raycast_supported_pixels": 12749,
         "fraction_depth_supported": 0.999921568627451,
-        "median_z_abs_error_m": 0.5171986818313599,
-        "p95_z_abs_error_m": 0.8258084535598755,
-        "fraction_hits_depth_residual_under_5cm": 0.03906188720683975
+        "median_z_abs_error_m": 0.007552027702331543,
+        "p95_z_abs_error_m": 0.02228798866271972,
+        "fraction_hits_depth_residual_under_5cm": 0.9891756216173817
       },
       {
         "original_frame": 642,
         "valid_sensor_depth_pixels": 12750,
-        "raycast_supported_pixels": 11789,
-        "fraction_depth_supported": 0.9246274509803921,
-        "median_z_abs_error_m": 0.6022013425827026,
-        "p95_z_abs_error_m": 1.1754950523376464,
-        "fraction_hits_depth_residual_under_5cm": 0.04105522096869964
+        "raycast_supported_pixels": 12742,
+        "fraction_depth_supported": 0.9993725490196078,
+        "median_z_abs_error_m": 0.0040198564529418945,
+        "p95_z_abs_error_m": 0.018957930803298943,
+        "fraction_hits_depth_residual_under_5cm": 0.993564589546382
       },
       {
         "original_frame": 722,
         "valid_sensor_depth_pixels": 12750,
-        "raycast_supported_pixels": 10852,
-        "fraction_depth_supported": 0.8511372549019608,
-        "median_z_abs_error_m": 0.43308204412460327,
-        "p95_z_abs_error_m": 1.2638425946235656,
-        "fraction_hits_depth_residual_under_5cm": 0.060081091043125694
+        "raycast_supported_pixels": 12749,
+        "fraction_depth_supported": 0.999921568627451,
+        "median_z_abs_error_m": 0.007271528244018555,
+        "p95_z_abs_error_m": 0.027614593505859313,
+        "fraction_hits_depth_residual_under_5cm": 0.9763903051219703
       },
       {
         "original_frame": 802,
         "valid_sensor_depth_pixels": 12734,
         "raycast_supported_pixels": 12717,
         "fraction_depth_supported": 0.9986649913617088,
-        "median_z_abs_error_m": 1.2523164749145508,
-        "p95_z_abs_error_m": 2.748531770706176,
-        "fraction_hits_depth_residual_under_5cm": 0.016041519226232603
+        "median_z_abs_error_m": 0.013534784317016602,
+        "p95_z_abs_error_m": 0.0380780696868896,
+        "fraction_hits_depth_residual_under_5cm": 0.9657151843988362
       },
       {
         "original_frame": 882,
         "valid_sensor_depth_pixels": 12748,
         "raycast_supported_pixels": 12739,
         "fraction_depth_supported": 0.9992940069030436,
-        "median_z_abs_error_m": 1.2279331684112549,
-        "p95_z_abs_error_m": 2.3267443895339963,
-        "fraction_hits_depth_residual_under_5cm": 0.014129837506868671
+        "median_z_abs_error_m": 0.008429169654846191,
+        "p95_z_abs_error_m": 0.027620220184326166,
+        "fraction_hits_depth_residual_under_5cm": 0.9749587879739383
       },
       {
         "original_frame": 962,
         "valid_sensor_depth_pixels": 12750,
         "raycast_supported_pixels": 12749,
         "fraction_depth_supported": 0.999921568627451,
-        "median_z_abs_error_m": 0.4552745819091797,
-        "p95_z_abs_error_m": 0.8937083959579465,
-        "fraction_hits_depth_residual_under_5cm": 0.05325907914346223
+        "median_z_abs_error_m": 0.006486058235168457,
+        "p95_z_abs_error_m": 0.022989511489868143,
+        "fraction_hits_depth_residual_under_5cm": 0.9814887442152326
       },
       {
         "original_frame": 1042,
         "valid_sensor_depth_pixels": 12749,
         "raycast_supported_pixels": 12747,
         "fraction_depth_supported": 0.9998431249509765,
-        "median_z_abs_error_m": 0.8168923854827881,
-        "p95_z_abs_error_m": 1.8284565210342396,
-        "fraction_hits_depth_residual_under_5cm": 0.03828351769043697
+        "median_z_abs_error_m": 0.01154637336730957,
+        "p95_z_abs_error_m": 0.03502242565155024,
+        "fraction_hits_depth_residual_under_5cm": 0.962344080960226
       },
       {
         "original_frame": 1122,
         "valid_sensor_depth_pixels": 12720,
-        "raycast_supported_pixels": 11987,
-        "fraction_depth_supported": 0.942374213836478,
-        "median_z_abs_error_m": 0.8024958372116089,
-        "p95_z_abs_error_m": 2.131057906150817,
-        "fraction_hits_depth_residual_under_5cm": 0.023692333361141238
+        "raycast_supported_pixels": 12699,
+        "fraction_depth_supported": 0.9983490566037736,
+        "median_z_abs_error_m": 0.007624149322509766,
+        "p95_z_abs_error_m": 0.029756748676299995,
+        "fraction_hits_depth_residual_under_5cm": 0.9748011654460981
       },
       {
         "original_frame": 1202,
         "valid_sensor_depth_pixels": 12735,
-        "raycast_supported_pixels": 10890,
-        "fraction_depth_supported": 0.8551236749116607,
-        "median_z_abs_error_m": 1.1761932373046875,
-        "p95_z_abs_error_m": 3.0992573142051696,
-        "fraction_hits_depth_residual_under_5cm": 0.018457300275482095
+        "raycast_supported_pixels": 12726,
+        "fraction_depth_supported": 0.9992932862190813,
+        "median_z_abs_error_m": 0.012593626976013184,
+        "p95_z_abs_error_m": 0.042730510234832764,
+        "fraction_hits_depth_residual_under_5cm": 0.9655036932264655
       },
       {
         "original_frame": 1282,
         "valid_sensor_depth_pixels": 12738,
-        "raycast_supported_pixels": 11744,
-        "fraction_depth_supported": 0.9219657717067044,
-        "median_z_abs_error_m": 1.4644875526428223,
-        "p95_z_abs_error_m": 3.2623376846313477,
-        "fraction_hits_depth_residual_under_5cm": 0.021372615803814714
+        "raycast_supported_pixels": 12722,
+        "fraction_depth_supported": 0.9987439158423614,
+        "median_z_abs_error_m": 0.012440145015716553,
+        "p95_z_abs_error_m": 0.0454443335533142,
+        "fraction_hits_depth_residual_under_5cm": 0.9642351831473038
       },
       {
         "original_frame": 1362,
         "valid_sensor_depth_pixels": 12727,
-        "raycast_supported_pixels": 10540,
-        "fraction_depth_supported": 0.8281606034415023,
-        "median_z_abs_error_m": 1.3257436752319336,
-        "p95_z_abs_error_m": 2.9215390682220455,
-        "fraction_hits_depth_residual_under_5cm": 0.02571157495256167
+        "raycast_supported_pixels": 12720,
+        "fraction_depth_supported": 0.9994499882140332,
+        "median_z_abs_error_m": 0.013823151588439941,
+        "p95_z_abs_error_m": 0.03896375894546508,
+        "fraction_hits_depth_residual_under_5cm": 0.9706761006289308
       },
       {
         "original_frame": 1442,
         "valid_sensor_depth_pixels": 12727,
-        "raycast_supported_pixels": 10490,
-        "fraction_depth_supported": 0.8242319478274535,
-        "median_z_abs_error_m": 1.0289430618286133,
-        "p95_z_abs_error_m": 2.7053849935531615,
-        "fraction_hits_depth_residual_under_5cm": 0.029933269780743565
+        "raycast_supported_pixels": 12715,
+        "fraction_depth_supported": 0.9990571226526282,
+        "median_z_abs_error_m": 0.011190414428710938,
+        "p95_z_abs_error_m": 0.03546116352081298,
+        "fraction_hits_depth_residual_under_5cm": 0.9701926858041683
       },
       {
         "original_frame": 1522,
         "valid_sensor_depth_pixels": 12750,
-        "raycast_supported_pixels": 7217,
-        "fraction_depth_supported": 0.5660392156862745,
-        "median_z_abs_error_m": 0.7344719171524048,
-        "p95_z_abs_error_m": 2.5654413223266603,
-        "fraction_hits_depth_residual_under_5cm": 0.03976721629485936
+        "raycast_supported_pixels": 12734,
+        "fraction_depth_supported": 0.9987450980392157,
+        "median_z_abs_error_m": 0.01045769453048706,
+        "p95_z_abs_error_m": 0.03214917182922363,
+        "fraction_hits_depth_residual_under_5cm": 0.9824092979425161
       },
       {
         "original_frame": 1602,
         "valid_sensor_depth_pixels": 12750,
-        "raycast_supported_pixels": 6342,
-        "fraction_depth_supported": 0.49741176470588233,
-        "median_z_abs_error_m": 0.6499888300895691,
-        "p95_z_abs_error_m": 1.9906752586364744,
-        "fraction_hits_depth_residual_under_5cm": 0.0499842321034374
+        "raycast_supported_pixels": 12749,
+        "fraction_depth_supported": 0.999921568627451,
+        "median_z_abs_error_m": 0.008106231689453125,
+        "p95_z_abs_error_m": 0.02464547157287597,
+        "fraction_hits_depth_residual_under_5cm": 0.994274060710644
       },
       {
         "original_frame": 1682,
         "valid_sensor_depth_pixels": 12750,
-        "raycast_supported_pixels": 4475,
-        "fraction_depth_supported": 0.3509803921568627,
-        "median_z_abs_error_m": 0.636062502861023,
-        "p95_z_abs_error_m": 1.29204398393631,
-        "fraction_hits_depth_residual_under_5cm": 0.000446927374301676
+        "raycast_supported_pixels": 12748,
+        "fraction_depth_supported": 0.9998431372549019,
+        "median_z_abs_error_m": 0.006863057613372803,
+        "p95_z_abs_error_m": 0.01561211347579956,
+        "fraction_hits_depth_residual_under_5cm": 0.9979604643865705
       },
       {
         "original_frame": 1762,
         "valid_sensor_depth_pixels": 12745,
-        "raycast_supported_pixels": 4673,
-        "fraction_depth_supported": 0.36665358964299727,
-        "median_z_abs_error_m": 1.1552156209945679,
-        "p95_z_abs_error_m": 2.074653577804565,
-        "fraction_hits_depth_residual_under_5cm": 0.0
+        "raycast_supported_pixels": 12734,
+        "fraction_depth_supported": 0.9991369164378188,
+        "median_z_abs_error_m": 0.007328450679779053,
+        "p95_z_abs_error_m": 0.031798601150512674,
+        "fraction_hits_depth_residual_under_5cm": 0.9897911104130673
       },
       {
         "original_frame": 1842,
         "valid_sensor_depth_pixels": 12750,
-        "raycast_supported_pixels": 7630,
-        "fraction_depth_supported": 0.5984313725490196,
-        "median_z_abs_error_m": 0.9372450113296509,
-        "p95_z_abs_error_m": 2.0221383213996886,
-        "fraction_hits_depth_residual_under_5cm": 0.025950196592398427
+        "raycast_supported_pixels": 12737,
+        "fraction_depth_supported": 0.9989803921568627,
+        "median_z_abs_error_m": 0.007272243499755859,
+        "p95_z_abs_error_m": 0.0355290412902832,
+        "fraction_hits_depth_residual_under_5cm": 0.9687524534819816
       },
       {
         "original_frame": 1922,
         "valid_sensor_depth_pixels": 12750,
-        "raycast_supported_pixels": 9357,
-        "fraction_depth_supported": 0.7338823529411764,
-        "median_z_abs_error_m": 0.6471478939056396,
-        "p95_z_abs_error_m": 1.3774494647979734,
-        "fraction_hits_depth_residual_under_5cm": 0.043603719140750244
+        "raycast_supported_pixels": 12718,
+        "fraction_depth_supported": 0.9974901960784314,
+        "median_z_abs_error_m": 0.009368538856506348,
+        "p95_z_abs_error_m": 0.03990905880928039,
+        "fraction_hits_depth_residual_under_5cm": 0.9609215285422236
       }
     ],
     "GT_reference_camera_poses_used": true,
@@ -303,7 +303,7 @@
     "image_original_depth_not_modified": true,
     "output": "d4_camera_aligned_comparison.jpg"
   },
-  "seconds_elapsed": 339.596,
+  "seconds_elapsed": 156.696,
   "no_hallucinated_unknown_geometry": true,
   "semantic_accuracy": "UNKNOWN_NO_MATCHED_GT",
   "object_IDF1": "NOT_EVALUATED",

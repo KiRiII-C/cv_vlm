@@ -16,9 +16,9 @@ Camera poses are provided GT oracle. No RTAB-Map SLAM ran during this reconstruc
 | Geometry patch mesh-face coverage | 98.41% |
 | Semantic support mesh vertices | 36.12% |
 | Held-out original depth frames excluded from TSDF | 25 |
-| Raycast coverage of valid held-out depth | 81.04% |
-| Supported ray median abs depth residual | 0.6983 m |
-| Supported ray p95 abs depth residual | 2.4733 m |
+| Raycast coverage of valid held-out depth | 99.86% |
+| Supported ray median abs depth residual | 0.0092 m |
+| Supported ray p95 abs depth residual | 0.0314 m |
 | Independent GT mesh one-way distance median | 0.0154 m |
 | Independent GT mesh one-way distance p95 | 1.8959 m |
 
@@ -29,5 +29,5 @@ Geometric patches are not physical-instance labels; YOLOE colors are predictions
 No physical UUID IDF1, instance IoU, open-set VLM mAP, RTAB-Map ATE or navigation validation.
 
 Full original measured-depth scene mesh PLY/GLB, aligned RGB/semantic renders,
-interactive HTML and per-view metrics: [Actions run 41644080592](https://github.com/KiRiII-C/cv_vlm/actions/runs/41644080592),
+interactive HTML and per-view metrics: [Actions run 41645799954](https://github.com/KiRiII-C/cv_vlm/actions/runs/41645799954),
 artifact D4-FULL-2000-REPLICA-500-RGBD-TSDF-QUALITY.
