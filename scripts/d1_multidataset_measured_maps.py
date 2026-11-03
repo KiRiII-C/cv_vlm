@@ -363,13 +363,15 @@ def process(args):
             print("D1_MAP_PROGRESS",dataset,i,len(rows),
                   "geometry",geometry_frames,"yolo",yolo_frames,flush=True)
 
-    if not geo_xyz or not sem_xyz:
-        raise RuntimeError("Missing valid measured geometry or predicted semantic object points")
+    if not geo_xyz:
+        raise RuntimeError("Missing real measured geometry; cannot build map")
+    # A dataset may genuinely contain NO objects among our twelve text prompts.
+    # This is a valid negative result: export a geometry-only map, never invent labels.
     all_geo=np.concatenate(geo_xyz,axis=0)
     all_rgb=np.concatenate(geo_rgb,axis=0)
-    all_sem=np.concatenate(sem_xyz,axis=0)
-    all_labels=np.concatenate(sem_class,axis=0)
-    all_conf=np.concatenate(sem_scores,axis=0)
+    all_sem=np.concatenate(sem_xyz,axis=0) if sem_xyz else np.empty((0,3),np.float32)
+    all_labels=np.concatenate(sem_class,axis=0) if sem_class else np.empty((0,),dtype="U40")
+    all_conf=np.concatenate(sem_scores,axis=0) if sem_scores else np.empty((0,),np.float32)
     if not (np.isfinite(all_geo).all() and np.isfinite(all_sem).all()):
         raise RuntimeError("Nonfinite REAL reconstructed camera point")
     xyz,rgb,gcnt=aggregate_voxels(all_geo,all_rgb,args.geometry_voxel)
@@ -392,10 +394,10 @@ def process(args):
             args.semantic_voxel)
         per_class_points.append(sx)
         per_class_ids.append(np.full(len(sx),cls_idx,dtype=np.int32))
-    if not per_class_points:
-        raise RuntimeError("No valid semantic class voxels")
-    sem_pts=np.concatenate(per_class_points)
-    sem_ids=np.concatenate(per_class_ids)
+    sem_pts = (np.concatenate(per_class_points) if per_class_points
+               else np.empty((0,3),dtype=np.float32))
+    sem_ids = (np.concatenate(per_class_ids) if per_class_ids
+               else np.empty((0,),dtype=np.int32))
     write_binary_ply(out/"semantic_predicted.ply",sem_pts,palette[sem_ids])
     ct={"geometry_frames":geometry_frames,"yolo_frames":yolo_frames}
     render_views(out,dataset,xyz,rgb,sem_pts,sem_ids,classes,ct)
@@ -430,6 +432,7 @@ def process(args):
       "source_valid_depth_fraction_min":float(np.min(valid_depth_fracs)),
       "raw_YOLOE_masks":raw_masks,
       "valid_predicted_3D_masks":sum(detections.values()),
+      "semantic_predictions_absent":not bool(detections),
       "valid_measured_depth_xyz_count_before_voxels":len(all_geo),
       "geometry_voxels":len(xyz),
       "predicted_semantic_points_before_voxels":len(all_sem),
