@@ -219,10 +219,18 @@ def run(args):
     rows,source=matched_sensor_rows(Path(args.root))
     if len(rows)<80:
         raise RuntimeError("D2 requires complete real RGB-D dataset")
-    source_meta=json.loads((Path(args.semantic_source)/"metrics.json").read_text())
+    # GitHub Actions artifacts may retain the original upload-directory tree.
+    # Discover a UNIQUE metadata file rather than assuming download flattening.
+    matching=list(Path(args.semantic_source).rglob("metrics.json"))
+    if len(matching)!=1:
+        raise RuntimeError(f"D2 requires exactly one immutable D1 metrics.json; got {len(matching)}")
+    semantic_root=matching[0].parent
+    source_meta=json.loads(matching[0].read_text())
     if source_meta.get("dataset")!=args.dataset or source_meta.get("GT_used_for_mapping") is not True:
         raise ValueError("D2 semantic source does not match original dataset and GT pose convention")
-    cloud=o3d.io.read_point_cloud(str(Path(args.semantic_source)/"semantic_predicted.ply"))
+    if not (semantic_root/"semantic_predicted.ply").is_file():
+        raise RuntimeError("D1 original semantic cloud missing from same source folder")
+    cloud=o3d.io.read_point_cloud(str(semantic_root/"semantic_predicted.ply"))
     observed=np.asarray(cloud.points,dtype=np.float32)
     observed_colors=np.round(np.asarray(cloud.colors)*255).astype(np.uint8)
     if len(observed)!=source_meta["predicted_semantic_voxels_per_class"]:
