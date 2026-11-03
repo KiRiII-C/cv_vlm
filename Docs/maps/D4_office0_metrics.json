@@ -1,0 +1,311 @@
+{
+  "experiment": "D4_REAL_OFFICIAL_FULL_REPLICA_OFFICE0",
+  "source": "NICE-SLAM official Replica.zip 12.4GB selective HTTP-range extraction",
+  "scene": "Replica office0",
+  "rendered_synthetic_sensor_not_real_camera": true,
+  "full_source_frames_available": 2000,
+  "actual_original_frames_integrated": 500,
+  "actual_YOLOE_inferences": 200,
+  "actual_valid_3D_YOLOE_masks": 497,
+  "class_mask_counts": {
+    "sofa": 134,
+    "chair": 189,
+    "table": 87,
+    "tv": 12,
+    "mouse": 10,
+    "potted plant": 45,
+    "cabinet": 8,
+    "laptop": 10,
+    "cup": 2
+  },
+  "tsdf_voxel_m": 0.018,
+  "source_depth_scale": 6553.5,
+  "camera_pose_source": "original GT/c2w, inverted for Open3D integration",
+  "RTABMap_run": false,
+  "physical_instance_accuracy_evaluated": false,
+  "geometric_regions_are_physical_instances": false,
+  "mesh": {
+    "full_mesh_vertices": 283810,
+    "full_mesh_faces": 555889,
+    "display_mesh_faces": 45000,
+    "semantic_supported_vertices": 102516,
+    "semantic_supported_fraction": 0.3612134878968324,
+    "nonzero_geometric_patch_faces": 547057,
+    "class_independent_patch_fraction": 0.9841119360160032
+  },
+  "geometric_patch_statistics": {
+    "candidate_components_before_filters": 1809,
+    "displayed_geometric_regions": 17,
+    "coverage_fraction_faces": 0.961136,
+    "max_region_triangle_count": 103671,
+    "class_agnostic": true,
+    "physical_instance_ids_claimed": false
+  },
+  "mesh_face_geometric_region_coverage": 0.9841119360160032,
+  "held_out_raycast_reprojection": {
+    "heldout_original_frames": 25,
+    "depth_sampling_stride": 8,
+    "observed_valid_depth_samples": 318580,
+    "supported_samples_by_reconstructed_mesh": 258176,
+    "raycast_depth_support_fraction": 0.8103961328394752,
+    "median_abs_sensor_depth_error_m_on_supported": 0.6982712149620056,
+    "p95_abs_sensor_depth_error_m_on_supported": 2.4733409881591797,
+    "raycast_within_5cm_fraction_on_supported": 0.03807867501239465,
+    "raycast_within_10cm_fraction_on_supported": 0.07732322136836886,
+    "per_view": [
+      {
+        "original_frame": 2,
+        "valid_sensor_depth_pixels": 12731,
+        "raycast_supported_pixels": 9559,
+        "fraction_depth_supported": 0.7508443955698688,
+        "median_z_abs_error_m": 0.8043241500854492,
+        "p95_z_abs_error_m": 2.404684567451478,
+        "fraction_hits_depth_residual_under_5cm": 0.035882414478501934
+      },
+      {
+        "original_frame": 82,
+        "valid_sensor_depth_pixels": 12726,
+        "raycast_supported_pixels": 5679,
+        "fraction_depth_supported": 0.44625176803394623,
+        "median_z_abs_error_m": 0.9037693738937378,
+        "p95_z_abs_error_m": 2.288944315910339,
+        "fraction_hits_depth_residual_under_5cm": 0.037858777953865115
+      },
+      {
+        "original_frame": 162,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 10444,
+        "fraction_depth_supported": 0.8191372549019608,
+        "median_z_abs_error_m": 1.0317010879516602,
+        "p95_z_abs_error_m": 2.0023284792900085,
+        "fraction_hits_depth_residual_under_5cm": 0.022117962466487937
+      },
+      {
+        "original_frame": 242,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 12692,
+        "fraction_depth_supported": 0.9954509803921568,
+        "median_z_abs_error_m": 0.49967139959335327,
+        "p95_z_abs_error_m": 0.8553300082683564,
+        "fraction_hits_depth_residual_under_5cm": 0.04695871415064608
+      },
+      {
+        "original_frame": 322,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 12650,
+        "fraction_depth_supported": 0.9921568627450981,
+        "median_z_abs_error_m": 0.16297215223312378,
+        "p95_z_abs_error_m": 0.3331507682800292,
+        "fraction_hits_depth_residual_under_5cm": 0.15375494071146245
+      },
+      {
+        "original_frame": 402,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 12749,
+        "fraction_depth_supported": 0.999921568627451,
+        "median_z_abs_error_m": 0.6198906898498535,
+        "p95_z_abs_error_m": 1.2095368385314935,
+        "fraction_hits_depth_residual_under_5cm": 0.0403953251235391
+      },
+      {
+        "original_frame": 482,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 12716,
+        "fraction_depth_supported": 0.9973333333333333,
+        "median_z_abs_error_m": 0.6687628030776978,
+        "p95_z_abs_error_m": 1.0263521373271942,
+        "fraction_hits_depth_residual_under_5cm": 0.021075810003145644
+      },
+      {
+        "original_frame": 562,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 12749,
+        "fraction_depth_supported": 0.999921568627451,
+        "median_z_abs_error_m": 0.5171986818313599,
+        "p95_z_abs_error_m": 0.8258084535598755,
+        "fraction_hits_depth_residual_under_5cm": 0.03906188720683975
+      },
+      {
+        "original_frame": 642,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 11789,
+        "fraction_depth_supported": 0.9246274509803921,
+        "median_z_abs_error_m": 0.6022013425827026,
+        "p95_z_abs_error_m": 1.1754950523376464,
+        "fraction_hits_depth_residual_under_5cm": 0.04105522096869964
+      },
+      {
+        "original_frame": 722,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 10852,
+        "fraction_depth_supported": 0.8511372549019608,
+        "median_z_abs_error_m": 0.43308204412460327,
+        "p95_z_abs_error_m": 1.2638425946235656,
+        "fraction_hits_depth_residual_under_5cm": 0.060081091043125694
+      },
+      {
+        "original_frame": 802,
+        "valid_sensor_depth_pixels": 12734,
+        "raycast_supported_pixels": 12717,
+        "fraction_depth_supported": 0.9986649913617088,
+        "median_z_abs_error_m": 1.2523164749145508,
+        "p95_z_abs_error_m": 2.748531770706176,
+        "fraction_hits_depth_residual_under_5cm": 0.016041519226232603
+      },
+      {
+        "original_frame": 882,
+        "valid_sensor_depth_pixels": 12748,
+        "raycast_supported_pixels": 12739,
+        "fraction_depth_supported": 0.9992940069030436,
+        "median_z_abs_error_m": 1.2279331684112549,
+        "p95_z_abs_error_m": 2.3267443895339963,
+        "fraction_hits_depth_residual_under_5cm": 0.014129837506868671
+      },
+      {
+        "original_frame": 962,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 12749,
+        "fraction_depth_supported": 0.999921568627451,
+        "median_z_abs_error_m": 0.4552745819091797,
+        "p95_z_abs_error_m": 0.8937083959579465,
+        "fraction_hits_depth_residual_under_5cm": 0.05325907914346223
+      },
+      {
+        "original_frame": 1042,
+        "valid_sensor_depth_pixels": 12749,
+        "raycast_supported_pixels": 12747,
+        "fraction_depth_supported": 0.9998431249509765,
+        "median_z_abs_error_m": 0.8168923854827881,
+        "p95_z_abs_error_m": 1.8284565210342396,
+        "fraction_hits_depth_residual_under_5cm": 0.03828351769043697
+      },
+      {
+        "original_frame": 1122,
+        "valid_sensor_depth_pixels": 12720,
+        "raycast_supported_pixels": 11987,
+        "fraction_depth_supported": 0.942374213836478,
+        "median_z_abs_error_m": 0.8024958372116089,
+        "p95_z_abs_error_m": 2.131057906150817,
+        "fraction_hits_depth_residual_under_5cm": 0.023692333361141238
+      },
+      {
+        "original_frame": 1202,
+        "valid_sensor_depth_pixels": 12735,
+        "raycast_supported_pixels": 10890,
+        "fraction_depth_supported": 0.8551236749116607,
+        "median_z_abs_error_m": 1.1761932373046875,
+        "p95_z_abs_error_m": 3.0992573142051696,
+        "fraction_hits_depth_residual_under_5cm": 0.018457300275482095
+      },
+      {
+        "original_frame": 1282,
+        "valid_sensor_depth_pixels": 12738,
+        "raycast_supported_pixels": 11744,
+        "fraction_depth_supported": 0.9219657717067044,
+        "median_z_abs_error_m": 1.4644875526428223,
+        "p95_z_abs_error_m": 3.2623376846313477,
+        "fraction_hits_depth_residual_under_5cm": 0.021372615803814714
+      },
+      {
+        "original_frame": 1362,
+        "valid_sensor_depth_pixels": 12727,
+        "raycast_supported_pixels": 10540,
+        "fraction_depth_supported": 0.8281606034415023,
+        "median_z_abs_error_m": 1.3257436752319336,
+        "p95_z_abs_error_m": 2.9215390682220455,
+        "fraction_hits_depth_residual_under_5cm": 0.02571157495256167
+      },
+      {
+        "original_frame": 1442,
+        "valid_sensor_depth_pixels": 12727,
+        "raycast_supported_pixels": 10490,
+        "fraction_depth_supported": 0.8242319478274535,
+        "median_z_abs_error_m": 1.0289430618286133,
+        "p95_z_abs_error_m": 2.7053849935531615,
+        "fraction_hits_depth_residual_under_5cm": 0.029933269780743565
+      },
+      {
+        "original_frame": 1522,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 7217,
+        "fraction_depth_supported": 0.5660392156862745,
+        "median_z_abs_error_m": 0.7344719171524048,
+        "p95_z_abs_error_m": 2.5654413223266603,
+        "fraction_hits_depth_residual_under_5cm": 0.03976721629485936
+      },
+      {
+        "original_frame": 1602,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 6342,
+        "fraction_depth_supported": 0.49741176470588233,
+        "median_z_abs_error_m": 0.6499888300895691,
+        "p95_z_abs_error_m": 1.9906752586364744,
+        "fraction_hits_depth_residual_under_5cm": 0.0499842321034374
+      },
+      {
+        "original_frame": 1682,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 4475,
+        "fraction_depth_supported": 0.3509803921568627,
+        "median_z_abs_error_m": 0.636062502861023,
+        "p95_z_abs_error_m": 1.29204398393631,
+        "fraction_hits_depth_residual_under_5cm": 0.000446927374301676
+      },
+      {
+        "original_frame": 1762,
+        "valid_sensor_depth_pixels": 12745,
+        "raycast_supported_pixels": 4673,
+        "fraction_depth_supported": 0.36665358964299727,
+        "median_z_abs_error_m": 1.1552156209945679,
+        "p95_z_abs_error_m": 2.074653577804565,
+        "fraction_hits_depth_residual_under_5cm": 0.0
+      },
+      {
+        "original_frame": 1842,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 7630,
+        "fraction_depth_supported": 0.5984313725490196,
+        "median_z_abs_error_m": 0.9372450113296509,
+        "p95_z_abs_error_m": 2.0221383213996886,
+        "fraction_hits_depth_residual_under_5cm": 0.025950196592398427
+      },
+      {
+        "original_frame": 1922,
+        "valid_sensor_depth_pixels": 12750,
+        "raycast_supported_pixels": 9357,
+        "fraction_depth_supported": 0.7338823529411764,
+        "median_z_abs_error_m": 0.6471478939056396,
+        "p95_z_abs_error_m": 1.3774494647979734,
+        "fraction_hits_depth_residual_under_5cm": 0.043603719140750244
+      }
+    ],
+    "GT_reference_camera_poses_used": true,
+    "not_SLAM_ATE": true
+  },
+  "independent_gt_mesh_surface": {
+    "official_independent_GT_mesh_vertices": 589517,
+    "official_independent_GT_mesh_triangles": 574842,
+    "reconstruction_sampled_surface_vertices": 18000,
+    "reconstructed_to_independent_GT_triangle_distance_median": 0.015392767265439034,
+    "reconstructed_to_independent_GT_triangle_distance_p95": 1.8958799719810484,
+    "reconstructed_points_within_GT_5cm_fraction": 0.5116111111111111,
+    "evaluation": "one_way_only_without_unobserved_room_penalty",
+    "not_complete_3D_chamfer_or_instance_accuracy": true
+  },
+  "visible_camera_comparisons": {
+    "comparison_original_frame_ids": [
+      0,
+      400,
+      800,
+      1200
+    ],
+    "reference_reconstructed_same_pose": true,
+    "image_original_depth_not_modified": true,
+    "output": "d4_camera_aligned_comparison.jpg"
+  },
+  "seconds_elapsed": 339.596,
+  "no_hallucinated_unknown_geometry": true,
+  "semantic_accuracy": "UNKNOWN_NO_MATCHED_GT",
+  "object_IDF1": "NOT_EVALUATED",
+  "results_are_not_direct_OVI_MAP_model_performance": true
+}
