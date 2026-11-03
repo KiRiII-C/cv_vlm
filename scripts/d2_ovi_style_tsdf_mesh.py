@@ -106,7 +106,8 @@ def mesh_display(mesh, labels, color_palette, out, *, max_faces=40000):
     if not len(triangles) or len(labels)!=len(original_vertices):
         raise ValueError("Invalid reconstructed mesh for rendering")
 
-    semantic_rgb=np.tile(np.array([.52,.55,.60],dtype=np.float64),
+    # Neutral unreliably classified mesh should remain legible, not black.
+    semantic_rgb=np.tile(np.array([.76,.78,.82],dtype=np.float64),
                          (len(labels),1))
     supported=labels>0
     semantic_rgb[supported]=color_palette[labels[supported]-1]/255.
@@ -136,11 +137,20 @@ def mesh_display(mesh, labels, color_palette, out, *, max_faces=40000):
         raise RuntimeError("Insufficient triangles after display mesh decimation")
     # Re-associate to original colored mesh after quadric vertex movement.
     _,orig_id=cKDTree(original_vertices).query(vertices,k=1,workers=1)
+    # Tone-map RGB only for VIEWING. The exported RGB PLY/GLB is unchanged.
+    # Real sensor RGB contains large dark surfaces invisible on a dark canvas.
     rgb=np.clip(original_colors[orig_id],0,1)
+    rgb_display=np.clip(.06+1.02*np.power(rgb,.68),0,1)
     col2=np.clip(semantic_rgb[orig_id],0,1)
     focus=original_vertices[supported] if int(supported.sum())>=100 else None
-    center,limits=centered_limits(original_vertices,focus)
-    camera_box=limits*1.45
+    geometry_center,geometry_limits=centered_limits(original_vertices,None,margin=.14)
+    if focus is not None:
+        semantic_center,semantic_limits=centered_limits(original_vertices,focus,margin=.22)
+        center=.65*semantic_center+.35*geometry_center
+        camera_box=np.maximum(geometry_limits*.90,semantic_limits*1.45)
+    else:
+        center=geometry_center
+        camera_box=geometry_limits*1.10
     # A mesh is made of REAL integrated RGB-D rays, but triangle faces are
     # TSDF-interpolated zero-level surfaces, NOT independently measured points.
     n0=faces.shape[0]
@@ -148,9 +158,9 @@ def mesh_display(mesh, labels, color_palette, out, *, max_faces=40000):
                vertices[faces[:,2]]-vertices[faces[:,0]])
     n=n/np.maximum(np.linalg.norm(n,axis=1)[:,None],1e-8)
     light=np.asarray([.55,-.45,.75]);light/=np.linalg.norm(light)
-    illumination=np.clip(.46+.64*np.maximum(n@light,0.),.34,1.)
+    illumination=np.clip(.83+.25*np.maximum(n@light,0.),.78,1.)
     fig=plt.figure(figsize=(18,9),facecolor="#151c27")
-    for column,(colors,heading) in enumerate(((rgb,"RGB-D TSDF SURFACE"),
+    for column,(colors,heading) in enumerate(((rgb_display,"RGB-D TSDF SURFACE"),
                                               (col2,"YOLOE CATEGORY ON MESH")),1):
         ax=fig.add_subplot(1,2,column,projection="3d",proj_type="ortho")
         ax.set_facecolor("#151c27")
@@ -170,7 +180,8 @@ def mesh_display(mesh, labels, color_palette, out, *, max_faces=40000):
     fig.text(.03,.964,"MEASURED RGB-D → TSDF MESH",color="white",
              fontsize=19,weight="bold")
     fig.text(.03,.925,"Source GT/mocap pose ORACLE (not RTAB-Map) · "
-              "gray surfaces = no reliable YOLOE class",color="#b3c6d9",fontsize=10)
+              "sensor RGB brightened for display · gray = unknown class",
+              color="#b3c6d9",fontsize=10)
     fig.text(.03,.033,"3D mesh triangles are interpolated TSDF surfaces; labels are model predictions, NOT physical-instance IDs.",
              color="#ffc5a7",fontsize=10)
     fig.savefig(out/"mesh_vs_semantics.png",dpi=150,facecolor=fig.get_facecolor())
@@ -178,7 +189,7 @@ def mesh_display(mesh, labels, color_palette, out, *, max_faces=40000):
 
     import plotly.graph_objects as go
     fig=go.Figure()
-    for i,(col,label) in enumerate(((rgb,"Original RGB surface"),
+    for i,(col,label) in enumerate(((rgb_display,"RGB display (tone-mapped)"),
                                      (col2,"Predicted semantic surface"))):
         fig.add_trace(go.Mesh3d(x=vertices[:,0],y=vertices[:,1],z=vertices[:,2],
            i=faces[:,0],j=faces[:,1],k=faces[:,2],
@@ -209,6 +220,9 @@ def mesh_display(mesh, labels, color_palette, out, *, max_faces=40000):
             "original_mesh_triangles":len(triangles),
             "original_mesh_vertices":len(original_vertices),
             "vertex_semantically_supported":int(supported.sum()),
+            "rgb_original_export_untouched":True,
+            "rgb_display_gamma":.68,
+            "camera_framing":"robust_geometry_plus_semantic_focus",
             "fraction_mesh_vertices_supported_by_predicted_classes":
               float(supported.mean())}
 
