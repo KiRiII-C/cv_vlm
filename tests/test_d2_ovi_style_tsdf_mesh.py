@@ -40,7 +40,7 @@ class OverlayTests(unittest.TestCase):
         self.assertEqual(x.tolist(),[0])
 
     def test_unknown_color_rejected_as_provenance_violation(self):
-        with self.assertRaisesRegex(ValueError,"palette"):
+        with self.assertRaisesRegex(ValueError,"configured classes"):
             label_mesh_vertices(self.verts,self.points,
                 np.full((4,3),[128,128,128],np.uint8),self.palette)
 
