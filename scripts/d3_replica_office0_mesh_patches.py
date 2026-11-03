@@ -235,7 +235,7 @@ def render(mesh,labels,patches,out,classes):
                 lighting=dict(ambient=.68,diffuse=.7,specular=.12,roughness=.85),
                 visible=(len(traces)==0))
         if kind=="vertex":
-            C1=scol if colors=="rgb" else colors
+            C1=scol if mode=="RGB" else colors
             kw["vertexcolor"]=np.round(C1*255).astype(np.uint8)
         else:
             kw["facecolor"]=["rgb(%d,%d,%d)"%tuple(c) for c in
