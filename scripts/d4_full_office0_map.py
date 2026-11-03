@@ -233,7 +233,11 @@ def comparison_from_camera(mesh,folder,poses,K,scale,frames,semantic,patches,out
     draw.rectangle((0,0,im.width,29),fill=(11,23,39))
     draw.text((18,7),text,fill=(245,248,252))
     im.save(out/"d4_camera_aligned_comparison.jpg",quality=90,optimize=True)
-    # Source is 100% real original render data; jpg is VIEW ONLY.
+    # A small faithful preview can be inspected directly on GitHub while the
+    # full-resolution aligned view remains available in Actions artifacts.
+    thumb=im.resize((1200,680),Image.Resampling.LANCZOS)
+    thumb.save(out/"d4_comparison_small.jpg",quality=82,optimize=True)
+    # Source is 100% original Replica render data; jpg is VIEW ONLY.
     return {"comparison_original_frame_ids":frames,
             "reference_reconstructed_same_pose":True,
             "image_original_depth_not_modified":True,
