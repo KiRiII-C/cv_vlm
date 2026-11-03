@@ -44,23 +44,43 @@ def main():
           f"Replica/office0/results/frame{idx:06d}.jpg",
           f"Replica/office0/results/depth{idx:06d}.png"
         ))
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import local
+    import time
     with RemoteZip(URL,initial_buffer_size=1048576,timeout=180) as remote:
-        manifest={f.filename:f for f in remote.infolist()}
-        if len([k for k in manifest if k.startswith(
-          "Replica/office0/results/depth") and k.endswith(".png")])!=2000:
-            raise RuntimeError("Official archive lacks complete 2000-frame depth source")
-        for i,name in enumerate(targets):
-            if name not in manifest:
-                raise RuntimeError(f"Missing original source: {name}")
-            path=dest/name
-            path.parent.mkdir(parents=True,exist_ok=True)
-            payload=remote.read(name)
-            if len(payload)!=manifest[name].file_size:
-                raise RuntimeError(f"Partial remote extraction {name}")
-            path.write_bytes(payload)
-            if i%100==0:
+        manifest={f.filename:f.file_size for f in remote.infolist()}
+    if len([k for k in manifest if k.startswith(
+       "Replica/office0/results/depth") and k.endswith(".png")])!=2000:
+        raise RuntimeError("Official archive lacks complete 2000-frame depth source")
+    if any(name not in manifest for name in targets):
+        raise RuntimeError("Missing source entries in official Replica.zip")
+    threadlocal=local()
+    def transfer(name):
+        path=dest/name
+        path.parent.mkdir(parents=True,exist_ok=True)
+        for attempt in range(4):
+            try:
+                z=getattr(threadlocal,"zip",None)
+                if z is None:
+                    z=RemoteZip(URL,initial_buffer_size=1048576,timeout=180)
+                    threadlocal.zip=z
+                payload=z.read(name)
+                if len(payload)!=manifest[name]:
+                    raise RuntimeError(f"Truncated original source: {name}")
+                path.write_bytes(payload)
+                return name
+            except Exception:
+                threadlocal.zip=None
+                if attempt==3:raise
+                time.sleep(.8*(attempt+1))
+    # RemoteZip instances are owned by individual threads; the HTTP server
+    # advertises Accept-Ranges. Six parallel readers avoid thousands of
+    # unnecessary sequential network round-trip delays.
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for done,name in enumerate(pool.map(transfer,targets),start=1):
+            if done%100==0:
                 print("D4_OFFICIAL_REPLICA_SOURCE_PROGRESS",
-                      i,len(targets),name,flush=True)
+                      done,len(targets),name,flush=True)
     stats={
      "source_original":URL,
      "source_research_only_license":True,
