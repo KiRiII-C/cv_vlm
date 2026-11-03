@@ -1,0 +1,97 @@
+{
+  "experiment": "D1_REAL_MULTIDATASET_MEASURED_SEMANTIC_3D_MAPS",
+  "dataset": "tum_desk2",
+  "input": {
+    "rgb_index_entries": 640,
+    "depth_index_entries": 639,
+    "gt_pose_index_entries": 2428,
+    "synchronized_matched": 635
+  },
+  "pose_source": "TUM Freiburg1 RGB-D, camera GT trajectory",
+  "GT_used_for_mapping": true,
+  "SLAM_evaluated": false,
+  "not_comparable_to_RTABMap_ATE": true,
+  "independent_instance_ground_truth": false,
+  "semantic_class_accuracy": "NOT_EVALUATED_NO_MATCHED_GT_LABELS",
+  "physical_IDF1": "NOT_EVALUATED",
+  "scene_change_F1": "NOT_EVALUATED",
+  "density_policy": {
+    "geometry_keyframe_stride": 4,
+    "geometry_pixel_stride": 4,
+    "geometry_voxel_m": 0.03,
+    "YOLOE_keyframe_stride": 20,
+    "semantic_voxel_m": 0.02,
+    "per_mask_measured_depth_points_cap": 3000
+  },
+  "model": "yoloe-26x-seg.pt",
+  "model_prompt_classes": [
+    "chair",
+    "table",
+    "sofa",
+    "cabinet",
+    "bookshelf",
+    "bed",
+    "laptop",
+    "computer monitor",
+    "keyboard",
+    "mouse",
+    "cup",
+    "potted plant"
+  ],
+  "confidence_threshold": 0.4,
+  "measured_geometry_frames": 159,
+  "actual_model_inference_frames": 32,
+  "source_valid_depth_fraction_mean": 0.7474731189399895,
+  "source_valid_depth_fraction_min": 0.6178776041666667,
+  "raw_YOLOE_masks": 225,
+  "valid_predicted_3D_masks": 79,
+  "semantic_predictions_absent": false,
+  "valid_measured_depth_xyz_count_before_voxels": 2288459,
+  "geometry_voxels": 136039,
+  "predicted_semantic_points_before_voxels": 190333,
+  "predicted_semantic_voxels_per_class": 10901,
+  "per_class_mask_observations": {
+    "keyboard": 25,
+    "mouse": 12,
+    "cup": 10,
+    "chair": 14,
+    "table": 2,
+    "laptop": 15,
+    "tv": 1
+  },
+  "per_class_measured_voxels": {
+    "chair": 2412,
+    "table": 413,
+    "sofa": 0,
+    "cabinet": 0,
+    "bookshelf": 0,
+    "bed": 0,
+    "laptop": 3040,
+    "tv": 512,
+    "keyboard": 3368,
+    "mouse": 412,
+    "cup": 744,
+    "potted plant": 0
+  },
+  "geometry_bbox_1_to_99_percentile_world_m": [
+    [
+      -2.2910447120666504,
+      -0.7040600776672363,
+      -0.013994405046105385
+    ],
+    [
+      1.9500313997268677,
+      2.8455822467803955,
+      2.0814156532287598
+    ]
+  ],
+  "model_inference_seconds_median": 1.7710384849999983,
+  "model_inference_seconds_p95": 1.8090156092499883,
+  "outputs": [
+    "geometry_rgb.ply",
+    "semantic_predicted.ply",
+    "map_overview.png",
+    "interactive_map.html"
+  ],
+  "limitations": "Visual 3D mapping uses original real RGB-D and GT/mocap poses as offline registration oracle, not RTAB-Map. Dynamic agents/objects may create ghosts in a globally fused geometry cloud. XY is world XY, not a validated floor occupancy map. Semantic masks are YOLOE predictions, no annotated GT. No autonomous relocalization, persistent physical-ID, or Nav2 safety test."
+}

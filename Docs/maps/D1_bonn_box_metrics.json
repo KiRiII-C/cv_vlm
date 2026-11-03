@@ -1,0 +1,95 @@
+{
+  "experiment": "D1_REAL_MULTIDATASET_MEASURED_SEMANTIC_3D_MAPS",
+  "dataset": "bonn_box",
+  "input": {
+    "rgb_index_entries": 590,
+    "depth_index_entries": 592,
+    "gt_pose_index_entries": 593,
+    "synchronized_matched": 590
+  },
+  "pose_source": "Bonn RGB-D, mocap marker pose + published camera extrinsic",
+  "GT_used_for_mapping": true,
+  "SLAM_evaluated": false,
+  "not_comparable_to_RTABMap_ATE": true,
+  "independent_instance_ground_truth": false,
+  "semantic_class_accuracy": "NOT_EVALUATED_NO_MATCHED_GT_LABELS",
+  "physical_IDF1": "NOT_EVALUATED",
+  "scene_change_F1": "NOT_EVALUATED",
+  "density_policy": {
+    "geometry_keyframe_stride": 4,
+    "geometry_pixel_stride": 4,
+    "geometry_voxel_m": 0.03,
+    "YOLOE_keyframe_stride": 20,
+    "semantic_voxel_m": 0.02,
+    "per_mask_measured_depth_points_cap": 3000
+  },
+  "model": "yoloe-26x-seg.pt",
+  "model_prompt_classes": [
+    "chair",
+    "table",
+    "sofa",
+    "cabinet",
+    "bookshelf",
+    "bed",
+    "laptop",
+    "computer monitor",
+    "keyboard",
+    "mouse",
+    "cup",
+    "potted plant"
+  ],
+  "confidence_threshold": 0.4,
+  "measured_geometry_frames": 148,
+  "actual_model_inference_frames": 30,
+  "source_valid_depth_fraction_mean": 0.8639446306658222,
+  "source_valid_depth_fraction_min": 0.82548828125,
+  "raw_YOLOE_masks": 89,
+  "valid_predicted_3D_masks": 35,
+  "semantic_predictions_absent": false,
+  "valid_measured_depth_xyz_count_before_voxels": 2453574,
+  "geometry_voxels": 185853,
+  "predicted_semantic_points_before_voxels": 88749,
+  "predicted_semantic_voxels_per_class": 19592,
+  "per_class_mask_observations": {
+    "chair": 23,
+    "laptop": 8,
+    "cabinet": 1,
+    "keyboard": 2,
+    "cup": 1
+  },
+  "per_class_measured_voxels": {
+    "chair": 10922,
+    "table": 0,
+    "sofa": 0,
+    "cabinet": 1966,
+    "bookshelf": 0,
+    "bed": 0,
+    "laptop": 6542,
+    "tv": 0,
+    "keyboard": 102,
+    "mouse": 0,
+    "cup": 60,
+    "potted plant": 0
+  },
+  "geometry_bbox_1_to_99_percentile_world_m": [
+    [
+      -2.3285529613494873,
+      -4.952759742736816,
+      0.02702569216489792
+    ],
+    [
+      2.794940233230591,
+      -1.5164216756820679,
+      1.8431955575942993
+    ]
+  ],
+  "model_inference_seconds_median": 1.8367178815000074,
+  "model_inference_seconds_p95": 1.8668852473999955,
+  "outputs": [
+    "geometry_rgb.ply",
+    "semantic_predicted.ply",
+    "map_overview.png",
+    "interactive_map.html"
+  ],
+  "limitations": "Visual 3D mapping uses original real RGB-D and GT/mocap poses as offline registration oracle, not RTAB-Map. Dynamic agents/objects may create ghosts in a globally fused geometry cloud. XY is world XY, not a validated floor occupancy map. Semantic masks are YOLOE predictions, no annotated GT. No autonomous relocalization, persistent physical-ID, or Nav2 safety test."
+}
