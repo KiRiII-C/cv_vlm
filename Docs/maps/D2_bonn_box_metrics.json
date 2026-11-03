@@ -1,0 +1,52 @@
+{
+  "experiment": "D2_REAL_RGBD_TSDF_MESH_AND_CONSERVATIVE_SEMANTIC_OVERLAY",
+  "dataset": "bonn_box",
+  "pose_source": "GT/mocap camera poses (ORACLE) from original D1 dataset",
+  "RTABMap_performed_in_D2": false,
+  "known_GT_pose_used_for_integration": true,
+  "original_real_RGBD_synchronized_frames": 590,
+  "integrated_measured_RGBD_frames": 148,
+  "frame_stride": 4,
+  "TSDF_voxel_m": 0.02,
+  "TSDF_truncation_m": 0.08,
+  "input_D1_semantic_voxels": 19592,
+  "semantic_nearest_surface_max_distance_m": 0.055,
+  "semantic_category_names": [
+    "chair",
+    "table",
+    "sofa",
+    "cabinet",
+    "bookshelf",
+    "bed",
+    "laptop",
+    "tv",
+    "keyboard",
+    "mouse",
+    "cup",
+    "potted plant"
+  ],
+  "mesh_render": {
+    "display_triangles": 39999,
+    "original_mesh_triangles": 282870,
+    "original_mesh_vertices": 152270,
+    "vertex_semantically_supported": 11534,
+    "fraction_mesh_vertices_supported_by_predicted_classes": 0.07574702830498457
+  },
+  "runtime_seconds": 7.485453215999996,
+  "physical_instance_labels_constructed": false,
+  "semantic_class_accuracy": "NOT_EVALUATED_NO_GT",
+  "IDF1": "NOT_EVALUATED_NO_PHYSICAL_GT",
+  "geometry_mode": "surface_from_TSDF_zero_crossing_interpolated_between_measured_depth_rays",
+  "unknown_geometry_policy": "unlabeled neutral surface, no invented classes",
+  "dynamic_ghosting_not_corrected": true,
+  "outputs": [
+    "rgb_mesh.ply",
+    "rgb_mesh.glb",
+    "semantic_mesh.ply",
+    "semantic_mesh.glb",
+    "mesh_vertex_semantics.npz",
+    "mesh_vs_semantics.png",
+    "mesh_interactive.html",
+    "d2_metrics.json"
+  ]
+}
