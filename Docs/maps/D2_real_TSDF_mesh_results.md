@@ -1,6 +1,6 @@
 # D2 — OVI-MAP-inspired *mesh rendering* of real RGB-D datasets
 
-**Status:** all 3 original measured RGB-D TSDF reconstruction jobs PASS. [GitHub Actions #41636779092](https://github.com/KiRiII-C/cv_vlm/actions/runs/41636779092).
+**Status:** all 3 original measured RGB-D TSDF reconstruction jobs PASS. [GitHub Actions #41637371732](https://github.com/KiRiII-C/cv_vlm/actions/runs/41637371732).
 
 **Not an OVI-MAP implementation:** this experiment borrows the meshed-surface + semantic-layer display style, but it uses GT/mocap poses (oracle), not a new SLAM pass, and YOLOE predictions, not OVI class-agnostic IDs or VLM embeddings.
 
@@ -16,19 +16,19 @@
 
 ![RGB-D mesh and semantic overlay for tum_xyz](D2_tum_xyz_surface.png)
 
-Binary full-resolution mesh PLY, GLB, self-contained interactive viewer and semantic support masks: [tum_xyz job artifact](https://github.com/KiRiII-C/cv_vlm/actions/runs/41636779092) (`d2-tsdf-surface-tum_xyz`).
+Binary full-resolution mesh PLY, GLB, self-contained interactive viewer and semantic support masks: [tum_xyz job artifact](https://github.com/KiRiII-C/cv_vlm/actions/runs/41637371732) (`d2-tsdf-surface-tum_xyz`).
 
 ### tum_desk2
 
 ![RGB-D mesh and semantic overlay for tum_desk2](D2_tum_desk2_surface.png)
 
-Binary full-resolution mesh PLY, GLB, self-contained interactive viewer and semantic support masks: [tum_desk2 job artifact](https://github.com/KiRiII-C/cv_vlm/actions/runs/41636779092) (`d2-tsdf-surface-tum_desk2`).
+Binary full-resolution mesh PLY, GLB, self-contained interactive viewer and semantic support masks: [tum_desk2 job artifact](https://github.com/KiRiII-C/cv_vlm/actions/runs/41637371732) (`d2-tsdf-surface-tum_desk2`).
 
 ### bonn_box
 
 ![RGB-D mesh and semantic overlay for bonn_box](D2_bonn_box_surface.png)
 
-Binary full-resolution mesh PLY, GLB, self-contained interactive viewer and semantic support masks: [bonn_box job artifact](https://github.com/KiRiII-C/cv_vlm/actions/runs/41636779092) (`d2-tsdf-surface-bonn_box`).
+Binary full-resolution mesh PLY, GLB, self-contained interactive viewer and semantic support masks: [bonn_box job artifact](https://github.com/KiRiII-C/cv_vlm/actions/runs/41637371732) (`d2-tsdf-surface-bonn_box`).
 
 ## What this experiment actually fixes
 

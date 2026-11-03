@@ -30,9 +30,12 @@
     "original_mesh_triangles": 346797,
     "original_mesh_vertices": 188928,
     "vertex_semantically_supported": 6955,
+    "rgb_original_export_untouched": true,
+    "rgb_display_gamma": 0.68,
+    "camera_framing": "robust_geometry_plus_semantic_focus",
     "fraction_mesh_vertices_supported_by_predicted_classes": 0.036812965785907856
   },
-  "runtime_seconds": 7.720161926000003,
+  "runtime_seconds": 6.901241010999996,
   "physical_instance_labels_constructed": false,
   "semantic_class_accuracy": "NOT_EVALUATED_NO_GT",
   "IDF1": "NOT_EVALUATED_NO_PHYSICAL_GT",
