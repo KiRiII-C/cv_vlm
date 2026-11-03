@@ -77,7 +77,7 @@ class TestD3Invariants(unittest.TestCase):
         Pw=np.array([[0,0,1.]])
         Tcw=np.linalg.inv(Twc)
         pcam=(Pw@Twc[:3,:3].T+Twc[:3,3])
-        np.testing.assert_allclose(pcam,[5,0,1])
+        np.testing.assert_allclose(pcam,[[5,0,1]])
         recovered=pcam@Tcw[:3,:3].T+Tcw[:3,3]
         np.testing.assert_allclose(recovered,Pw)
 
