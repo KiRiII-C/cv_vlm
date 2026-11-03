@@ -1,0 +1,230 @@
+name: D1 real multi-dataset RGB-D geometry + YOLOE26x 3D maps
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - 'scripts/d1_multidataset_measured_maps.py'
+      - 'tests/test_d1_multidataset_measured_maps.py'
+      - '.github/workflows/d1-real-multidataset-maps.yml'
+      - 'Docs/maps/D1_protocol.md'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  build-map:
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        dataset: ['tum_xyz','tum_desk2','bonn_box']
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      OMP_NUM_THREADS: '3'
+      MKL_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MPLBACKEND: 'Agg'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install original project YOLOE26x and map renderer
+        run: |
+          set -euo pipefail
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[test]' 'ultralytics>=8.4.12' matplotlib plotly
+          python -m py_compile scripts/d1_multidataset_measured_maps.py
+          python -m unittest discover -s tests -p 'test_d1_multidataset_measured_maps.py' -v
+      - name: Download complete ORIGINAL measured RGB-D recording and GT trajectory
+        shell: bash
+        env:
+          DATASET: ${{ matrix.dataset }}
+        run: |
+          set -euo pipefail
+          mkdir -p data/d1
+          if [[ "$DATASET" == "tum_xyz" || "$DATASET" == "tum_desk2" ]]; then
+            if [[ "$DATASET" == "tum_xyz" ]]; then PART="xyz"; else PART="desk2"; fi
+            SRC="rgbd_dataset_freiburg1_${PART}"
+            curl --fail --location --retry 3 --connect-timeout 20 --max-time 1100 \
+              --output data/d1/source.tgz "https://cvg.cit.tum.de/rgbd/dataset/freiburg1/${SRC}.tgz" || \
+            curl --fail --location --retry 3 --connect-timeout 20 --max-time 1100 \
+              --output data/d1/source.tgz "https://vision.in.tum.de/rgbd/dataset/freiburg1/${SRC}.tgz" || \
+            curl --fail --location --retry 3 --connect-timeout 20 --max-time 1100 \
+              --output data/d1/source.tgz "https://webshare.cvg.cit.tum.de/rgbd/dataset/freiburg1/${SRC}.tgz"
+            tar -xzf data/d1/source.tgz -C data/d1
+            echo "D1_ROOT=data/d1/${SRC}" >> "$GITHUB_ENV"
+          else
+            curl --fail --location --retry 3 --connect-timeout 20 --max-time 1100 \
+              --output data/d1/source.zip \
+              'https://www.ipb.uni-bonn.de/html/projects/rgbd_dynamic2019/rgbd_bonn_moving_obstructing_box.zip'
+            unzip -q data/d1/source.zip -d data/d1
+            ROOT=$(dirname "$(find data/d1 -maxdepth 6 -name rgb.txt -print -quit)")
+            echo "D1_ROOT=$ROOT" >> "$GITHUB_ENV"
+          fi
+          find data/d1 -maxdepth 5 -name rgb.txt -print
+          test -n "$(find data/d1 -maxdepth 6 -name depth.txt -print -quit)"
+          test -n "$(find data/d1 -maxdepth 6 -name groundtruth.txt -print -quit)"
+      - name: Build real measured dense geometry + YOLOE26x multi-class semantic map
+        shell: bash
+        env:
+          DATASET: ${{ matrix.dataset }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="src:scripts"
+          python -u scripts/d1_multidataset_measured_maps.py \
+            --dataset "$DATASET" --root "$D1_ROOT" --out "results/d1/$DATASET" \
+            --weights yoloe-26x-seg.pt --device cpu \
+            --geometry-stride 4 --pixel-stride 4 \
+            --yolo-stride 20 --confidence .40 \
+            --geometry-voxel .03 --semantic-voxel .02 \
+            --object-point-cap 3000 2>&1 | tee "d1_${DATASET}_real.log"
+      - name: Verify real camera/frame provenance, no GT semantic labels, and actual map outputs
+        shell: bash
+        env:
+          DATASET: ${{ matrix.dataset }}
+        run: |
+          python - <<'PY'
+          import json,os,pathlib
+          name=os.environ['DATASET'];p=pathlib.Path('results/d1')/name
+          x=json.loads((p/'metrics.json').read_text())
+          n=x['input']['synchronized_matched']
+          assert x['dataset']==name
+          assert n>=80
+          assert x['GT_used_for_mapping'] is True and x['SLAM_evaluated'] is False
+          assert x['measured_geometry_frames']==(n-1)//4+1
+          assert x['actual_model_inference_frames']==(n-1)//20+1
+          assert x['geometry_voxels']>10000
+          assert x['valid_measured_depth_xyz_count_before_voxels']>10000
+          assert x['independent_instance_ground_truth'] is False
+          assert x['physical_IDF1']=='NOT_EVALUATED'
+          assert x['semantic_class_accuracy'].startswith('NOT_EVALUATED')
+          assert x['semantic_predictions_absent']==(x['valid_predicted_3D_masks']==0)
+          for file,size in [('geometry_rgb.ply',1000),('semantic_predicted.ply',100),
+                            ('map_overview.png',20000),('interactive_map.html',2000)]:
+            assert (p/file).is_file() and (p/file).stat().st_size>size,(name,file)
+          print('D1_VERIFIED_REAL_MAP',name,{
+            'synced_pairs':n,'geometry_voxels':x['geometry_voxels'],
+            'actual_YOLOE_frames':x['actual_model_inference_frames'],
+            'semantic_masks':x['valid_predicted_3D_masks']},flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: d1-map-${{ matrix.dataset }}
+          path: |
+            results/d1/${{ matrix.dataset }}/
+            d1_${{ matrix.dataset }}_real.log
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 4
+
+  consolidate:
+    needs: build-map
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all THREE original cross-dataset map products
+        uses: actions/download-artifact@v4
+        with:
+          pattern: d1-map-*
+          path: gathered
+          merge-multiple: false
+      - name: Audit dataset separateness and publish actual measured metrics
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json,shutil
+          datasets=('tum_xyz','tum_desk2','bonn_box')
+          reports={}
+          for name in datasets:
+            p=Path('gathered')/('d1-map-'+name)
+            x=json.loads((p/'metrics.json').read_text())
+            assert x['dataset']==name
+            assert x['input']['synchronized_matched']>=80
+            assert x['GT_used_for_mapping'] and not x['SLAM_evaluated']
+            assert x['geometry_voxels']>10000
+            assert (p/'geometry_rgb.ply').stat().st_size>1000
+            assert (p/'map_overview.png').stat().st_size>20000
+            reports[name]=x
+          target=Path('Docs/maps');target.mkdir(parents=True,exist_ok=True)
+          lines=[
+           '# D1 — реальные карты: TUM xyz, TUM desk2, Bonn moving obstructing box',
+           '',
+           '**Доказательный статус:** все три карты созданы из оригинальных измеренных RGB-D кадров и проверенных GT/mocap поз. '
+           '**Это oracle-registered сравнение геометрии/YOLOE, НЕ три прогона RTAB-Map.**',
+           '',
+           'Исходная RTAB-Map A6/B7 карта TUM desk отдельно построена без GT поз: '
+           '[реальный B7](https://github.com/KiRiII-C/cv_vlm/actions/runs/41484368417).',
+           '',
+           '| Dataset | Real synchronized RGB-D | Geometry frames | YOLOE26x frames | Measured 3D voxels | Valid semantic masks | Semantic voxels |',
+           '|---|---:|---:|---:|---:|---:|---:|',
+          ]
+          for name in datasets:
+            x=reports[name]
+            lines.append(f'| {name} | {x["input"]["synchronized_matched"]} | '
+              f'{x["measured_geometry_frames"]} | {x["actual_model_inference_frames"]} | '
+              f'{x["geometry_voxels"]} | {x["valid_predicted_3D_masks"]} | '
+              f'{x["predicted_semantic_voxels_per_class"]} |')
+            shutil.copyfile(Path('gathered')/('d1-map-'+name)/'map_overview.png',
+                            target/('D1_'+name+'_overview.png'))
+            (target/('D1_'+name+'_metrics.json')).write_text(
+               json.dumps(x,indent=2,ensure_ascii=False)+'\n')
+          lines += ['', '## Карты и оригинальные артефакты', '']
+          for name in datasets:
+            lines += [
+              f'### {name}',
+              '',
+              f'![Real measured {name} 3D semantic map](D1_{name}_overview.png)',
+              '',
+              f'Сегментационные классы (число 3D-масок): '
+              + (', '.join(f'{k}={v}' for k,v in sorted(
+                  reports[name]['per_class_mask_observations'].items())) or
+                  'не обнаружены среди 12 настроенных классов — геометрическая карта сохранена'),
+              '',
+              f'Полные бинарные PLY, интерактивный HTML, PNG и исходные метрики: '
+              f'[GitHub Actions run #'+__import__('os').environ['GITHUB_RUN_ID']
+              +'](https://github.com/KiRiII-C/cv_vlm/actions/runs/'
+              +__import__('os').environ['GITHUB_RUN_ID']+')'
+              +f' — artifact `d1-map-{name}`.',
+              ''
+            ]
+          lines += ['## Ограничения интерпретации','',
+           '1. TUM xyz и desk2 — разные реальные записи одного датасета/лабораторной среды; Bonn — независимый динамический RGB-D датасет.',
+           '2. Эти три карты используют GT/mocap camera poses (oracle). ATE/loop closure/online relocalization RTAB-Map здесь НЕ оценивались.',
+           '3. Каждая семантическая точка — реально измеренная depth-точка внутри предсказанной YOLOE-26x маски, без интерполяции глубины.',
+           '4. Категории являются предсказаниями модели; GT классов/физических экземпляров не проверены. Не выводить precision/mIoU или IDF1 из количества вокселей.',
+           '5. Динамический Bonn не очищался от перемещающихся объектов при накоплении глобального облака; возможны ghost surfaces.',
+           '6. XY — проекция мировой системы координат, не сертифицированная карта занятости Nav2.',
+           '','## Следующий эксперимент','',
+           'Для apples-to-apples SLAM-метрик повторить эти записи с RTAB-Map без подачи GT-поз '
+           'и сравнить SE3 ATE и полноту карты с oracle по независимой GT. '
+           'Для семантической точности и реальных UUID нужен GT instance segmentation на тех же записях.',
+           '']
+          (target/'D1_cross_dataset_results.md').write_text('\n'.join(lines))
+          print('D1_THREE_REAL_MAPS_ALL_VERIFIED',[(k,v['geometry_voxels']) for k,v in reports.items()])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: D1-THREE-DATASET-VERIFIED-SUMMARY
+          path: Docs/maps/D1_*
+          retention-days: 30
+      - name: Commit all three verified previews and metrics to this research branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Docs/maps/D1_*
+          if git diff --cached --quiet; then
+            echo "Verified D1 maps already in branch"
+          else
+            git commit -m 'Publish measured D1 multi-dataset TUM and Bonn map previews'
+            git fetch origin experiments/rtabmap-geometry-a0-20261031
+            git rebase origin/experiments/rtabmap-geometry-a0-20261031
+            git push origin HEAD:experiments/rtabmap-geometry-a0-20261031
+          fi
