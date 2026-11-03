@@ -1,0 +1,59 @@
+name: D1 publish verified TUM and Bonn real maps (reuse completed artifacts)
+on:
+  push:
+    branches:
+      - experiments/rtabmap-geometry-a0-20261031
+    paths:
+      - 'scripts/d1_publish_existing_maps.py'
+      - '.github/workflows/d1-publish-verified-maps.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish-existing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reuse three fully completed original RGB-D map artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: d1-map-*
+          run-id: 41594963441
+          github-token: ${{ github.token }}
+          path: gathered
+          merge-multiple: false
+      - name: Fail closed if any source dataset, measured map, or preview is absent
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/d1_publish_existing_maps.py
+          python scripts/d1_publish_existing_maps.py \
+            --artifacts gathered --source-run 41594963441 \
+            --out Docs/maps
+          test -s Docs/maps/D1_cross_dataset_results.md
+          for dataset in tum_xyz tum_desk2 bonn_box; do
+            test -s "Docs/maps/D1_${dataset}_overview.png"
+            test -s "Docs/maps/D1_${dataset}_metrics.json"
+          done
+      - name: Upload report and 3 generated preview images
+        uses: actions/upload-artifact@v4
+        with:
+          name: D1-VERIFIED-THREE-REAL-DATASET-MAPS-REPORT
+          path: Docs/maps/D1_*
+          retention-days: 30
+      - name: Persist verified PNG previews and numerical evidence in experiment branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Docs/maps/D1_*
+          if git diff --cached --quiet; then
+            echo 'No change to verified maps'
+          else
+            git commit -m 'Publish three verified TUM and Bonn real 3D map previews'
+            git fetch origin experiments/rtabmap-geometry-a0-20261031
+            git rebase origin/experiments/rtabmap-geometry-a0-20261031
+            git push origin HEAD:experiments/rtabmap-geometry-a0-20261031
+          fi
