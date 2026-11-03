@@ -137,50 +137,50 @@ jobs:
           g=r['geometry_heldout_depth_distance']
           m=r['mesh'];pt=r['class_agnostic_patch_stats']
           s=f"""# D3 — Replica office0: reconstruction, geometric patches, YOLOE semantics
-
-**Status:** verified real source of photo-realistic Replica RGB-D renders, 100 / 100 images.
-[GitHub Actions run {run}](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).
-**This is NOT RTAB-Map and does not report an OVI-MAP inference comparison.**
-Input camera poses are GT oracle and the sequence is computer-rendered, not from a real RGB-D sensor.
-
-![Three-way Replica office0 mesh](D3_replica_office0_three_modes.png)
-
-| Metric | Result |
-|---|---:|
-| Original rendered RGB-D images | {r['original_rgbd_frames_fused']} |
-| 3D mesh faces | {m['full_mesh_faces']} |
-| Mesh vertices | {m['full_mesh_vertices']} |
-| YOLOE-26x inference frames | {r['YOLOE_inference_frames']} |
-| Observed YOLOE class masks | {r['YOLOE_valid_object_masks']} |
-| Independent class-agnostic geometric surface patches | {pt['displayed_geometric_regions']} |
-| Mesh surface patch face coverage | {100*m['class_independent_patch_fraction']:.2f}% |
-| Mesh vertex YOLOE category support | {100*m['semantic_supported_fraction']:.2f}% |
-| Held-out odd camera frames | {g['heldout_frame_count']} |
-| Median odd-depth-to-even-mesh nearest vertex | {g['median_nn_vertex_m']:.4f} m |
-| 95th percentile odd-depth-to-even-mesh nearest vertex | {g['p95_nn_vertex_m']:.4f} m |
-| Held-out sensor-depth points within 5cm of even-frame mesh | {100*g['coverage_5cm']:.2f}% |
-
-**Critical distinction:** patches are geometric surface regions, NOT verified object instances or physical UUIDs.
-YOLOE labels are model predictions and not instance-level or open-set SigLIP scores.
-The 50 odd frames were held out of the first 50-even-frame TSDF for the sensor
-consistency proxy, then integrated into the final 100-frame mesh.
-
-**Artifacts:** `rgb_mesh.ply`, `rgb_mesh.glb`, `semantic_mesh.ply`,
-`semantic_mesh.glb`, `mesh_patch_and_semantic_labels.npz`,
-`interactive_office0.html`, and metrics in the
-[run artifacts](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).
-
-**Limitations:** the nearest mesh-vertex check is not independent 3D GT; the
-reference screenshot in OVI-MAP may use GT-mesh vertex transfer; this is
-an intentionally restricted 100-frame subset, whereas the official example
-uses longer sequences. No physical-instance GT, direct OVI result, SLAM ATE,
-relocalization, or Nav2 safety was evaluated.
-
-**Next work:** on the same 100 frames evaluate class-agnostic instance
-segmentation with 3D GT class/instance labels, add per-object view-selected
-text embeddings and motion-aware long-term memory. Render isolated object meshes
-in a separate layer to compare identity consistency.
-"""
+          
+          **Status:** verified real source of photo-realistic Replica RGB-D renders, 100 / 100 images.
+          [GitHub Actions run {run}](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).
+          **This is NOT RTAB-Map and does not report an OVI-MAP inference comparison.**
+          Input camera poses are GT oracle and the sequence is computer-rendered, not from a real RGB-D sensor.
+          
+          ![Three-way Replica office0 mesh](D3_replica_office0_three_modes.png)
+          
+          | Metric | Result |
+          |---|---:|
+          | Original rendered RGB-D images | {r['original_rgbd_frames_fused']} |
+          | 3D mesh faces | {m['full_mesh_faces']} |
+          | Mesh vertices | {m['full_mesh_vertices']} |
+          | YOLOE-26x inference frames | {r['YOLOE_inference_frames']} |
+          | Observed YOLOE class masks | {r['YOLOE_valid_object_masks']} |
+          | Independent class-agnostic geometric surface patches | {pt['displayed_geometric_regions']} |
+          | Mesh surface patch face coverage | {100*m['class_independent_patch_fraction']:.2f}% |
+          | Mesh vertex YOLOE category support | {100*m['semantic_supported_fraction']:.2f}% |
+          | Held-out odd camera frames | {g['heldout_frame_count']} |
+          | Median odd-depth-to-even-mesh nearest vertex | {g['median_nn_vertex_m']:.4f} m |
+          | 95th percentile odd-depth-to-even-mesh nearest vertex | {g['p95_nn_vertex_m']:.4f} m |
+          | Held-out sensor-depth points within 5cm of even-frame mesh | {100*g['coverage_5cm']:.2f}% |
+          
+          **Critical distinction:** patches are geometric surface regions, NOT verified object instances or physical UUIDs.
+          YOLOE labels are model predictions and not instance-level or open-set SigLIP scores.
+          The 50 odd frames were held out of the first 50-even-frame TSDF for the sensor
+          consistency proxy, then integrated into the final 100-frame mesh.
+          
+          **Artifacts:** `rgb_mesh.ply`, `rgb_mesh.glb`, `semantic_mesh.ply`,
+          `semantic_mesh.glb`, `mesh_patch_and_semantic_labels.npz`,
+          `interactive_office0.html`, and metrics in the
+          [run artifacts](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).
+          
+          **Limitations:** the nearest mesh-vertex check is not independent 3D GT; the
+          reference screenshot in OVI-MAP may use GT-mesh vertex transfer; this is
+          an intentionally restricted 100-frame subset, whereas the official example
+          uses longer sequences. No physical-instance GT, direct OVI result, SLAM ATE,
+          relocalization, or Nav2 safety was evaluated.
+          
+          **Next work:** on the same 100 frames evaluate class-agnostic instance
+          segmentation with 3D GT class/instance labels, add per-object view-selected
+          text embeddings and motion-aware long-term memory. Render isolated object meshes
+          in a separate layer to compare identity consistency.
+          """
           (out/'D3_replica_office0_results.md').write_text(s)
           PY
           git config user.name 'github-actions[bot]'
