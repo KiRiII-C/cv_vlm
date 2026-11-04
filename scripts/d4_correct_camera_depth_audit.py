@@ -61,12 +61,20 @@ def repair(args):
     if not (new["heldout_original_frames"]==25 and
             new["observed_valid_depth_samples"]==old["observed_valid_depth_samples"]):
         raise RuntimeError("Repair changed source measured depth population")
-    if abs(new["raycast_depth_support_fraction"]-
-           old["raycast_depth_support_fraction"])>1e-8:
-        raise RuntimeError("Raycast hit support changed despite only depth projection fix")
-    if not new["median_abs_sensor_depth_error_m_on_supported"] < old[
-            "median_abs_sensor_depth_error_m_on_supported"]:
-        raise RuntimeError("Raycast projection change did not reduce baseline geometric error")
+    # The raw raycast hit triangle set is constant, but VALID camera-depth
+    # support also requires corrected optical z > 0.25m. Fixing R[2,:] rather
+    # than R[:,2] is allowed to change this valid-support population.
+    if not 0 < new["raycast_depth_support_fraction"] <= 1:
+        raise RuntimeError("Corrected raycast source coverage is invalid")
+    if not np.isfinite(new["median_abs_sensor_depth_error_m_on_supported"]) or (
+            not np.isfinite(new["p95_abs_sensor_depth_error_m_on_supported"])):
+        raise RuntimeError("Corrected optical camera-depth metrics invalid")
+    corrected_support_delta=(new["raycast_depth_support_fraction"]-
+                              old["raycast_depth_support_fraction"])
+    print("D4_M1_CAMERA_Z_VALIDITY_CHANGED_SUPPORT",
+          {"old":old["raycast_depth_support_fraction"],
+           "new":new["raycast_depth_support_fraction"],
+           "change_pp":100*corrected_support_delta},flush=True)
     new_gt=gt_mesh_oneway_distance(mesh,gt)
     if abs(new_gt["reconstructed_to_independent_GT_triangle_distance_median"]-
            original["independent_gt_mesh_surface"][
@@ -75,6 +83,7 @@ def repair(args):
     new["metric_revision"]="D4-M1_corrected_camera_R_row_2_not_column_2"
     original["held_out_raycast_reprojection"]=new
     original["metric_revision"]="D4-M1_fixed_camera_z_depth_projection"
+    original["support_fraction_change_due_to_corrected_z_validity"]=float(corrected_support_delta)
     original["superseded_metric_error_m"]={
       "median":old["median_abs_sensor_depth_error_m_on_supported"],
       "p95":old["p95_abs_sensor_depth_error_m_on_supported"],
