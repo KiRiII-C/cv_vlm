@@ -1,0 +1,51 @@
+{
+  "experiment": "D6B_REAL_RGBD_MULTIDATASET_CLASS_SEEDED_SURFACE_CANDIDATES",
+  "real_sensor_dataset": "tum_desk2",
+  "original_source_D2_run": 41637371732,
+  "source_real_measured_sensor_frames": 159,
+  "source_D2_independent_GT_mocap_poses_used_oracle": true,
+  "RTABMap_evaluated": false,
+  "no_YOLOE_new_inference": true,
+  "source_measured_YOLOE_3D_semantic_vertices": 6955,
+  "original_mesh_triangles": 346797,
+  "original_mesh_vertices": 188928,
+  "source_D2_mean_geometry_vertex_semantic_fraction": 0.036812965785907856,
+  "D6_original_geometric_regions": 32,
+  "original_strong_seed_faces": 13311,
+  "original_strong_seed_area_fraction": 0.04105110839009285,
+  "expanded_semantics_new_faces": 2488,
+  "expanded_semantics_new_area_fraction": 0.008389398455619812,
+  "expanded_semantics_area_fraction": 0.04944050684571266,
+  "unexpanded_region_stats": {
+    "connected_components_raw": 334434,
+    "accepted_candidate_regions": 12,
+    "accepted_surface_area_m2": 1.3328364561204458,
+    "accepted_faces": 9202,
+    "candidate_min_area_m2": 0.022,
+    "candidate_min_faces": 18,
+    "class_conditioned_seed_topology": true,
+    "physical_instances_verified": false
+  },
+  "grown_region_stats": {
+    "connected_components_raw": 332023,
+    "accepted_candidate_regions": 14,
+    "accepted_surface_area_m2": 1.6970378843929328,
+    "accepted_faces": 11618,
+    "candidate_min_area_m2": 0.022,
+    "candidate_min_faces": 18,
+    "class_conditioned_seed_topology": true,
+    "physical_instances_verified": false
+  },
+  "physical_instance_IDF1": "NOT_EVALUATED",
+  "independent_GT_instance_PQ": "NOT_EVALUATED",
+  "no_verified_physical_instance_IDs": true,
+  "dynamic_Bonn_ghost_surfaces_still_possible": false,
+  "limitation": "Original D2 GT poses used for geometry. Category-seeded graph components may split/merge objects. Metric labels on new faces are inferred only from neighboring source YOLOE, never independent GT. No true object-instance annotations or persistence in these sequences.",
+  "outputs": [
+    "D6_instance_candidates_visual.png",
+    "D6_interactive_candidates.html",
+    "candidate_surface_instances.glb",
+    "candidate_face_evidence.npz",
+    "d6b_metrics.json"
+  ]
+}
