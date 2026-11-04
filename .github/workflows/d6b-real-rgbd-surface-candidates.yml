@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install 'numpy>=1.26,<2' 'scipy>=1.12,<2' open3d==0.19.0 matplotlib trimesh plotly
+          python -m pip install 'numpy>=1.26,<2' 'scipy>=1.12,<2' open3d==0.19.0 matplotlib trimesh plotly 'opencv-python-headless<4.12'
           python -m py_compile scripts/d6b_cross_dataset_object_surface_candidates.py
           python -m unittest discover -s tests -p test_d6_semantic_surface_candidates.py -v
       - name: Fetch original D2 mesh and measured YOLOE 3D source vertices, no new RGB-D image download
