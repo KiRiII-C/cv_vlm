@@ -162,7 +162,7 @@ def colors_for_ids(groups):
     return table[x]
 
 
-def view_and_export(mesh,classes,baseline_patch,b0,b1,output):
+def view_and_export(mesh,classes,baseline_patch,b0,b1,output,*,scene_title="REPLICA OFFICE0"):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -216,7 +216,7 @@ def view_and_export(mesh,classes,baseline_patch,b0,b1,output):
             setlim(c-d/2,c+d/2)
         ax.set_box_aspect(rg);ax.view_init(elev=27,azim=-61)
         ax.set_axis_off();ax.set_title(name,color="white",fontsize=12,pad=12)
-    fig.text(.03,.96,"D6 | FULL REPLICA OFFICE0 — SAME MEASURED MESH, 4 MODES",
+    fig.text(.03,.96,"D6 | "+scene_title+" — SAME RECONSTRUCTED RGB-D MESH, 4 MODES",
              color="white",fontsize=16,weight="bold")
     fig.text(.03,.025,
        "D6 candidate colors are unverified object-like surface regions; generated from original YOLOE observations and geometry, not GT instance IDs.",
