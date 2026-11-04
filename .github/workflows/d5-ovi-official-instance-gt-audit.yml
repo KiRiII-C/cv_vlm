@@ -1,0 +1,167 @@
+name: D5 evaluate full Replica office0 geometric proposals against independent OVI-MAP instance GT
+on:
+  push:
+    branches: [experiments/rtabmap-geometry-a0-20261031]
+    paths:
+      - scripts/d5_official_instance_gt_audit.py
+      - tests/test_d5_official_instance_audit.py
+      - .github/workflows/d5-ovi-official-instance-gt-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    env:
+      PYTHONPATH: src:scripts
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      OMP_NUM_THREADS: '3'
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install GT-independent geometric evaluation and run fail-closed mathematical tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'numpy>=1.26,<2' 'scipy>=1.12,<2' \
+            open3d==0.19.0 matplotlib trimesh opencv-python-headless remotezip
+          python -m py_compile scripts/d5_official_instance_gt_audit.py
+          python -m unittest discover -s tests -p test_d5_official_instance_audit.py -v
+      - name: Fetch IMMUTABLE original D4 predicted 500-frame real-source reconstructed RGB-D mesh
+        uses: actions/download-artifact@v4
+        with:
+          name: D4-FULL-2000-REPLICA-500-RGBD-TSDF-QUALITY
+          run-id: 41645799954
+          github-token: ${{ github.token }}
+          path: immutable-d4
+      - name: Obtain independent OVI-MAP official instance GT and original Replica GT mesh ONLY for evaluation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p gt
+          curl --fail --location --retry 4 --connect-timeout 20 --max-time 90 \
+            --output gt/instance_labels_office0.txt \
+            https://raw.githubusercontent.com/OVI-MAP/OVI-MAP/main/scripts/datasets/replica_gt_instances/instance_labels_office0.txt
+          python - <<'PY'
+          from remotezip import RemoteZip
+          from pathlib import Path
+          from d4_extract_full_replica import URL
+          dest=Path('gt/office0_mesh.ply')
+          with RemoteZip(URL,initial_buffer_size=1048576,timeout=160) as remote:
+            manifest={f.filename:f.file_size for f in remote.infolist()}
+            key='Replica/office0_mesh.ply'
+            assert key in manifest
+            data=remote.read(key)
+            assert len(data)==manifest[key] and len(data)>100000
+            dest.write_bytes(data)
+            print('D5_OFFICIAL_GT_MESH_AND_ID_LABELS',len(data),
+                  Path('gt/instance_labels_office0.txt').stat().st_size,flush=True)
+          PY
+      - name: Test published D4 region assignment vs two preregistered class-independent variants on official instance GT
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u scripts/d5_official_instance_gt_audit.py \
+            --d4 immutable-d4 \
+            --gt-mesh gt/office0_mesh.ply \
+            --gt-labels gt/instance_labels_office0.txt \
+            --out results/d5 2>&1 | tee d5_gt_audit.log
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('results/d5')
+          r=json.loads((p/'d5_instance_audit_results.json').read_text())
+          assert r['GT_used_for_training_or_proposal_generation'] is False
+          assert r['source_reconstructed_triangle_count']==555889
+          assert r['source_unique_physical_GT_IDs']>=3
+          assert 0.05<=r['GT_supported_reconstruction_area_fraction_5cm']<=1
+          assert set(r['quantitative_independent_GT_instance_results'])=={
+            'published_D4','finer_normal_color','moderate_normal_color'}
+          for name,row in r['quantitative_independent_GT_instance_results'].items():
+            assert 0<=row['physical_instance_PQ_at_IoU50']<=1
+            assert row['TP']+row['FN']==row['independent_GT_objects_with_min_observed_area']
+            assert row['TP']+row['FP']==row['proposed_regions_with_min_observed_area']
+          for f,minimum in [('D5_instance_audit_visual_comparison.png',30000),
+                            ('d5_instance_audit_labels.npz',10000)]:
+            assert (p/f).stat().st_size>minimum
+          print('D5_REPRODUCIBLE_OFFICIAL_GT_INSTANCE_PQ_PASS',
+            [(name,x['physical_instance_PQ_at_IoU50'])
+              for name,x in r['quantitative_independent_GT_instance_results'].items()],flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: D5-OVIMAP-OFFICIAL-REPLICA-INSTANCE-PQ-AUDIT
+          path: |
+            results/d5/
+            d5_gt_audit.log
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Publish only audited, independently GT-scored results to experimental branch
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json,shutil,os
+          src=Path('results/d5')
+          r=json.loads((src/'d5_instance_audit_results.json').read_text())
+          out=Path('Docs/maps');out.mkdir(parents=True,exist_ok=True)
+          shutil.copyfile(src/'D5_instance_audit_visual_comparison.png',
+                          out/'D5_instance_audit_visual_comparison.png')
+          (out/'D5_instance_audit_metrics.json').write_text(
+              json.dumps(r,indent=2,ensure_ascii=False)+'\n')
+          run=os.environ['GITHUB_RUN_ID']
+          lines=['# D5: объективная оценка качества Instance Map на Replica office0',
+           '',
+           f'**Verified real D4 reconstruction and independent published OVI-MAP GT.** '
+           f'[CI run {run}](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).',
+           '',
+           '![Mesh geometric proposals and independently annotated physical instances](D5_instance_audit_visual_comparison.png)',
+           '',
+           '**GT is evaluation only, not used in algorithm or variant selection.** Camera poses are original Replica GT '
+           '(not RTAB-Map). Replica is a rendered dataset; original full scene mesh is separately provided.',
+           '',
+           f'Original reconstructed faces: **{r["source_reconstructed_triangle_count"]:,}**; '
+           f'GT-supported reconstructed face-area within 5 cm: '
+           f'**{100*r["GT_supported_reconstruction_area_fraction_5cm"]:.2f}%**; '
+           f'GT physical instance IDs visible on mapped surface: **{r["GT_visible_IDs_on_reconstructed_surface"]}**.',
+           '',
+           '| Class-independent method | Proposed regions | GT PQ@0.50 | True positive | False positive | Missed GT instance | Area-weighted patch purity |',
+           '|---|---:|---:|---:|---:|---:|---:|']
+          for name,m in r['quantitative_independent_GT_instance_results'].items():
+            lines.append(f'| {name} | {m["proposed_regions_with_min_observed_area"]} | '
+              f'{m["physical_instance_PQ_at_IoU50"]:.4f} | {m["TP"]} | '
+              f'{m["FP"]} | {m["FN"]} | '
+              f'{m["pairwise_independent_gt_purity_of_proposed_regions"]:.4f} |')
+          lines+=['', '**How to read:** ground-truth labels are independently provided per ORIGINAL GT vertex by OVI-MAP, '
+            'then matched to reconstructed faces only if the nearest GT triangle is <=5 cm away and all its 3 GT vertices agree. '
+            'Unobserved GT parts are intentionally excluded, so this is an *observed-surface* instance PQ, '
+            'not whole-room recall. GT label 0 remains a valid original source ID; unknown is -1.',
+            '', '**Negative result is informative:** a geometric surface patch need not be one physical object; '
+            'strong-looking colored regions can merge separate objects and miss small ones. '
+            'Variant changes were predeclared without reading GT; selecting the best on this same scene '
+            'would not be a fair generalization test.',
+            '', '**Not evaluated:** physical-ID tracking/IDF1, VLM query retrieval, RTAB-Map ATE, "
+            "open-world missing instances, Nav2 safety. No new detector model was trained.",
+            '', f'Full PLY GT-independent D4 map remains in [D4 run 41645799954]'
+            '(https://github.com/KiRiII-C/cv_vlm/actions/runs/41645799954). '
+            f'Full D5 per-face GT comparison is in [CI artifacts]'
+            f'(https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).',
+            '']
+          (out/'D5_instance_GT_audit.md').write_text('\n'.join(lines))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Docs/maps/D5_*
+          git commit -m 'Document D5 official OVI-MAP instance-GT PQ and segmentation error study'
+          git fetch origin experiments/rtabmap-geometry-a0-20261031
+          git rebase origin/experiments/rtabmap-geometry-a0-20261031
+          git push origin HEAD:experiments/rtabmap-geometry-a0-20261031
