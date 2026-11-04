@@ -1,0 +1,49 @@
+{
+  "experiment": "D6_CATEGORY_SEEDED_3D_SURFACE_INSTANCE_CANDIDATES",
+  "source_D4_original_success_run": 41645799954,
+  "same_full_replica_mesh_as_D4": true,
+  "source_GT_pose_oracle_not_RTABMap": true,
+  "original_source_500_RGBD_200_YOLOE_inferences_reused": true,
+  "retrained_or_inferred_YOLOE_this_run": false,
+  "reconstructed_original_mesh_faces": 555889,
+  "reconstructed_original_mesh_vertices": 283810,
+  "unmodified_original_YOLOE_supported_mesh_vertices": 102516,
+  "source_D4_geometry_patch_regions": 17,
+  "raw_seed_faces": 195476,
+  "raw_seed_area_fraction": 0.3381165862083435,
+  "conservatively_expanded_faces": 22385,
+  "expansion_only_area_fraction": 0.03899698331952095,
+  "expanded_class_supported_area_fraction": 0.3771135210990906,
+  "raw_candidate_instance_map": {
+    "connected_components_raw": 361858,
+    "accepted_candidate_regions": 46,
+    "accepted_surface_area_m2": 24.867290917678844,
+    "accepted_faces": 186894,
+    "candidate_min_area_m2": 0.022,
+    "candidate_min_faces": 18,
+    "class_conditioned_seed_topology": true,
+    "physical_instances_verified": false
+  },
+  "grown_candidate_instance_map": {
+    "connected_components_raw": 339555,
+    "accepted_candidate_regions": 47,
+    "accepted_surface_area_m2": 27.83192268628566,
+    "accepted_faces": 209226,
+    "candidate_min_area_m2": 0.022,
+    "candidate_min_faces": 18,
+    "class_conditioned_seed_topology": true,
+    "physical_instances_verified": false
+  },
+  "surface_area_m2": 76.31671142578125,
+  "new_physical_UUIDs_claimed": false,
+  "physical_IDF1": "NOT_EVALUATED",
+  "independent_GT_instance_PQ": "NOT_EVALUATED_NO_VALID_ANNOTATION_IN_D6",
+  "scientific_interpretation": "Descriptive source-conditioned candidate region stability; NOT measured segmentation accuracy or physical objects. Inferred labels are separately marked and may be incorrect.",
+  "outputs": [
+    "D6_instance_candidates_visual.png",
+    "D6_interactive_candidates.html",
+    "candidate_surface_instances.glb",
+    "candidate_face_evidence.npz",
+    "d6_metrics.json"
+  ]
+}
