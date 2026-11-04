@@ -1,0 +1,184 @@
+name: D6-B transfer measured 3D surface candidates to real TUM xyz desk2 and dynamic Bonn
+on:
+  push:
+    branches: [experiments/rtabmap-geometry-a0-20261031]
+    paths:
+      - scripts/d6b_cross_dataset_object_surface_candidates.py
+      - .github/workflows/d6b-real-rgbd-surface-candidates.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  original-real-rgbd:
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        dataset: [tum_xyz,tum_desk2,bonn_box]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: src:scripts
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install 3D topology dependencies and check immutable source-label invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'numpy>=1.26,<2' 'scipy>=1.12,<2' open3d==0.19.0 matplotlib trimesh plotly
+          python -m py_compile scripts/d6b_cross_dataset_object_surface_candidates.py
+          python -m unittest discover -s tests -p test_d6_semantic_surface_candidates.py -v
+      - name: Fetch original D2 mesh and measured YOLOE 3D source vertices, no new RGB-D image download
+        uses: actions/download-artifact@v4
+        with:
+          name: d2-tsdf-surface-${{ matrix.dataset }}
+          run-id: 41637371732
+          github-token: ${{ github.token }}
+          path: immutable-d2
+      - name: Build surface-connected 3D object candidate map from original real sensor data
+        shell: bash
+        env:
+          DATASET: ${{ matrix.dataset }}
+        run: |
+          set -euo pipefail
+          python -u scripts/d6b_cross_dataset_object_surface_candidates.py \
+             --d2 immutable-d2 --dataset "$DATASET" \
+             --out "results/d6b/$DATASET" 2>&1 | tee "d6b_$DATASET.log"
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          dataset=os.environ['DATASET']
+          p=Path('results/d6b')/dataset
+          r=json.loads((p/'d6b_metrics.json').read_text())
+          assert r['real_sensor_dataset']==dataset
+          assert r['source_D2_independent_GT_mocap_poses_used_oracle']
+          assert r['RTABMap_evaluated'] is False
+          assert r['no_YOLOE_new_inference'] is True
+          assert r['original_mesh_triangles']>50000
+          assert r['original_mesh_vertices']>25000
+          assert r['physical_instance_IDF1']=='NOT_EVALUATED'
+          assert r['independent_GT_instance_PQ']=='NOT_EVALUATED'
+          assert r['no_verified_physical_instance_IDs']
+          assert r['expanded_semantics_area_fraction']>=r['original_strong_seed_area_fraction']
+          for name,size in (('D6_instance_candidates_visual.png',20000),
+                            ('D6_interactive_candidates.html',20000),
+                            ('candidate_surface_instances.glb',20000),
+                            ('candidate_face_evidence.npz',10000)):
+            assert (p/name).is_file() and (p/name).stat().st_size>=size,(dataset,name)
+          print('D6B_INDEPENDENT_REAL_SENSOR_CANDIDATES_VERIFIED',
+                dataset,r['original_mesh_triangles'],
+                r['grown_region_stats']['accepted_candidate_regions'],flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: d6b-real-surface-candidates-${{ matrix.dataset }}
+          path: |
+            results/d6b/${{ matrix.dataset }}/
+            d6b_${{ matrix.dataset }}.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  summarize:
+    needs: original-real-rgbd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: d6b-real-surface-candidates-*
+          path: obtained
+          merge-multiple: false
+      - name: Audit all three sensor-specific 3D-mesh maps and publish honest real results
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json,shutil,os
+          names=('tum_xyz','tum_desk2','bonn_box')
+          results={}
+          target=Path('Docs/maps');target.mkdir(parents=True,exist_ok=True)
+          for name in names:
+            folder=Path('obtained')/('d6b-real-surface-candidates-'+name)
+            found=list(folder.rglob('d6b_metrics.json'))
+            if len(found)!=1:raise RuntimeError(f'Incomplete D6-B original source evidence: {name}')
+            p=found[0].parent
+            r=json.loads(found[0].read_text())
+            if r['real_sensor_dataset']!=name or r['RTABMap_evaluated'] or not r['no_YOLOE_new_inference']:
+              raise RuntimeError('Dataset or source provenance mismatch')
+            img=p/'D6_instance_candidates_visual.png'
+            if not img.exists() or img.stat().st_size<20000:
+              raise RuntimeError('Missing actual mesh candidate visualization')
+            shutil.copyfile(img,target/f'D6B_{name}_surface_candidates.png')
+            (target/f'D6B_{name}_metrics.json').write_text(
+              json.dumps(r,ensure_ascii=False,indent=2)+'\n')
+            results[name]=r
+          run=os.environ['GITHUB_RUN_ID']
+          lines=['# D6-B — независимый RGB-D контроль кандидатных поверхностей на TUM и Bonn',
+          '',
+          f'**Status: all 3 real sensor records PASS.** [Actions {run}](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).',
+          '',
+          'Same class-seeded 3D geometric growing algorithm as successful synthetic-rendered Replica D6, '
+          'on original REAL TUM Freiburg1 xyz/desk2 and Bonn moving_obstructing_box 2cm TSDF meshes.',
+          '',
+          '**ALL geometry in this D6B uses ORACLE GT/mocap pose estimates from D2, not actual RTAB-Map.** '
+          'No new YOLOE model inference, re-training, or invented sensor data.',
+          '',
+          '| Real dataset | Mesh faces | Geometry-only regions | Strong seed area | Expanded class-supported area | Raw candidates | Grown candidates |',
+          '|---|---:|---:|---:|---:|---:|---:|']
+          for name in names:
+            r=results[name]
+            lines.append(f'| {name} | {r["original_mesh_triangles"]} | {r["D6_original_geometric_regions"]} | '
+              f'{100*r["original_strong_seed_area_fraction"]:.2f}% | '
+              f'{100*r["expanded_semantics_area_fraction"]:.2f}% | '
+              f'{r["unexpanded_region_stats"]["accepted_candidate_regions"]} | '
+              f'{r["grown_region_stats"]["accepted_candidate_regions"]} |')
+          lines+=['','## Real RGB-D source surface visualizations','']
+          for name in names:
+            lines+= [f'### {name}','',
+               f'![Measured {name} class-seeded surface candidate map](D6B_{name}_surface_candidates.png)',
+               '',
+               f'Full source mesh GLB, per-face evidence and interactive HTML are archived in '
+               f'[run {run} artifacts](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}) '
+               f'under `d6b-real-surface-candidates-{name}`.','']
+          lines+=['## Scientific limits','',
+            'Class-conditional connected components are candidates, not verified physical objects. '
+            'No independent annotation exists on these exact matched source 3D surfaces, so '
+            'precision, PQ, IDF1, tracking and dynamic change metrics are explicitly unmeasured. '
+            'Bonn moving objects can produce ghost geometry in globally integrated TSDF. '
+            'The three records are from two source datasets; TUM desk2 and xyz share the TUM acquisition family.',
+            '','The extension only labels previously unlabeled faces when nearby original YOLOE semantics, '
+            'surface normals, RGB and metric proximity agree. It does not change original YOLOE labels. '
+            'This is a source robustness test, not evidence of higher instance accuracy.',
+            '']
+          (target/'D6B_real_multidataset_candidates.md').write_text('\n'.join(lines))
+          print('D6B_THREE_REAL_SENSOR_MAPS_VERIFIED',
+             [(name,results[name]['grown_region_stats']['accepted_candidate_regions'])
+                for name in names],flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: D6B-VERIFIED-THREE-REAL-RGBD-SURFACE-MAPS
+          path: Docs/maps/D6B_*
+          retention-days: 30
+      - name: Commit only genuinely source-backed validated maps
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Docs/maps/D6B_*
+          git commit -m 'Publish verified D6-B real TUM and Bonn candidate instance-like mesh maps'
+          git fetch origin experiments/rtabmap-geometry-a0-20261031
+          git rebase origin/experiments/rtabmap-geometry-a0-20261031
+          git push origin HEAD:experiments/rtabmap-geometry-a0-20261031
