@@ -1,0 +1,145 @@
+name: D6 original 500-frame Replica class-seeded mesh candidate object-map comparison
+on:
+  push:
+    branches: [experiments/rtabmap-geometry-a0-20261031]
+    paths:
+      - scripts/d6_semantic_seeded_surface_candidates.py
+      - tests/test_d6_semantic_surface_candidates.py
+      - .github/workflows/d6-replica-instance-candidate-mesh.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  original-mesh-surface-candidates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      PYTHONPATH: src:scripts
+      OMP_NUM_THREADS: '3'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install geometry and rendering; execute mathematical invariants before touching actual result data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'numpy>=1.26,<2' 'scipy>=1.12,<2' open3d==0.19.0 matplotlib trimesh plotly
+          python -m py_compile scripts/d6_semantic_seeded_surface_candidates.py
+          python -m unittest discover -s tests -p test_d6_semantic_surface_candidates.py -v
+      - name: Reuse actual successful D4 full-scene original sensor render mesh and 200 YOLOE predictions
+        uses: actions/download-artifact@v4
+        with:
+          name: D4-FULL-2000-REPLICA-500-RGBD-TSDF-QUALITY
+          run-id: 41645799954
+          github-token: ${{ github.token }}
+          path: original-d4
+      - name: Compare geometry-only D4 patches to conservatively expanded YOLOE-supported 3D surface candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u scripts/d6_semantic_seeded_surface_candidates.py \
+            --d4 original-d4 --out results/d6 2>&1 | tee d6_candidate_mesh.log
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('results/d6');r=json.loads((p/'d6_metrics.json').read_text())
+          assert r['same_full_replica_mesh_as_D4'] is True
+          assert r['retrained_or_inferred_YOLOE_this_run'] is False
+          assert r['new_physical_UUIDs_claimed'] is False
+          assert r['reconstructed_original_mesh_faces']==555889
+          assert r['reconstructed_original_mesh_vertices']==283810
+          assert r['unmodified_original_YOLOE_supported_mesh_vertices']==102516
+          assert r['source_D4_geometry_patch_regions']>0
+          assert r['raw_seed_faces']>0
+          assert r['conservatively_expanded_faces']>=0
+          assert r['expanded_class_supported_area_fraction']>=r['raw_seed_area_fraction']
+          assert r['independent_GT_instance_PQ'].startswith('NOT_EVALUATED')
+          for name,size in (('D6_instance_candidates_visual.png',25000),
+                            ('D6_interactive_candidates.html',10000),
+                            ('candidate_surface_instances.glb',20000),
+                            ('candidate_face_evidence.npz',10000)):
+            assert (p/name).is_file() and (p/name).stat().st_size>size,(name,size)
+          print('D6_500FRAME_ORIGINAL_MESH_CLASS_SEEDED_PASS',{
+            'source_geometry_regions':r['source_D4_geometry_patch_regions'],
+            'raw_candidates':r['raw_candidate_instance_map']['accepted_candidate_regions'],
+            'expanded_candidates':r['grown_candidate_instance_map']['accepted_candidate_regions'],
+            'strong_seed_area':r['raw_seed_area_fraction'],
+            'after_inference_area':r['expanded_class_supported_area_fraction']
+          },flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: D6-REPLICA-ORIGINAL-MESH-SEMANTIC-INSTANCE-CANDIDATE-COMPARISON
+          path: |
+            results/d6/
+            d6_candidate_mesh.log
+          retention-days: 30
+          if-no-files-found: warn
+      - name: Document actual source evidence, candidate limitations and visualization
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json,os,shutil
+          src=Path('results/d6')
+          r=json.loads((src/'d6_metrics.json').read_text())
+          target=Path('Docs/maps');target.mkdir(parents=True,exist_ok=True)
+          shutil.copyfile(src/'D6_instance_candidates_visual.png',
+                          target/'D6_instance_candidates_visual.png')
+          (target/'D6_instance_candidates_metrics.json').write_text(
+              json.dumps(r,indent=2,ensure_ascii=False)+'\n')
+          run=os.environ['GITHUB_RUN_ID']
+          lines=['# D6 — отделение кандидатных объектных поверхностей на полной Replica office0',
+          '',
+          f'**Verified original sensor-rendered source D4, 500 TSDF RGB-D frames, 200 original YOLOE inference frames.** '
+          f'[Actions {run}](https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).',
+          '',
+          '![Full 500-frame mesh under four distinct display modes](D6_instance_candidates_visual.png)',
+          '',
+          '| Metric | Real result |',
+          '|---|---:|',
+          f'| Original reconstructed triangle faces | {r["reconstructed_original_mesh_faces"]:,} |',
+          f'| Original D4 geometry-only regions | {r["source_D4_geometry_patch_regions"]} |',
+          f'| Strong-seed YOLOE-supported faces | {r["raw_seed_faces"]:,} |',
+          f'| Strong-seed original mesh area | {100*r["raw_seed_area_fraction"]:.2f}% |',
+          f'| Newly inferred neighbor faces (NOT directly observed label) | {r["conservatively_expanded_faces"]:,} |',
+          f'| Reconstructed mesh area with supported or inferred class | {100*r["expanded_class_supported_area_fraction"]:.2f}% |',
+          f'| Disjoint raw-class 3D surface candidates | {r["raw_candidate_instance_map"]["accepted_candidate_regions"]} |',
+          f'| Disjoint expanded-class 3D surface candidates | {r["grown_candidate_instance_map"]["accepted_candidate_regions"]} |',
+          '',
+          'Strong YOLOE categories are never changed by the grower. '
+          'The new labels are conditional inference based on class agreement, '
+          'surface-normal coherence, RGB similarity and spatial proximity; '
+          'predicted classes may still be wrong. No new YOLOE pass or invented RGB-D frames.',
+          '',
+          '**Critical:** these are class-CONDITIONED connected components on the reconstructed mesh, '
+          'not full class-agnostic object segmentation, physical instance identities, '
+          'cross-session tracking or a validated OVI-MAP replacement. '
+          'More area or more colored regions does not imply improved segmentation IoU.',
+          '',
+          'Original full-resolution GLB and per-face raw versus expanded evidence, '
+          f'plus interactive 3D HTML, are in [run {run} artifacts]'
+          f'(https://github.com/KiRiII-C/cv_vlm/actions/runs/{run}).',
+          '',
+          'An unbiased instance-level PQ comparison awaits aligned original GT mesh '
+          'and OVI-MAP official instance labels. Its host was unreachable in D5; '
+          'D6 does not silently substitute wrong vertex order or fabricate scores.',
+          '']
+          (target/'D6_candidate_instances_results.md').write_text('\n'.join(lines))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Docs/maps/D6_*
+          git commit -m 'Publish verified D6 class-seeded full Replica 3D surface candidate comparison'
+          git fetch origin experiments/rtabmap-geometry-a0-20261031
+          git rebase origin/experiments/rtabmap-geometry-a0-20261031
+          git push origin HEAD:experiments/rtabmap-geometry-a0-20261031
