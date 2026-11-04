@@ -1,6 +1,6 @@
 # D6 — отделение кандидатных объектных поверхностей на полной Replica office0
 
-**Verified original sensor-rendered source D4, 500 TSDF RGB-D frames, 200 original YOLOE inference frames.** [Actions 41803927063](https://github.com/KiRiII-C/cv_vlm/actions/runs/41803927063).
+**Verified original sensor-rendered source D4, 500 TSDF RGB-D frames, 200 original YOLOE inference frames.** [Actions 41804336153](https://github.com/KiRiII-C/cv_vlm/actions/runs/41804336153).
 
 ![Full 500-frame mesh under four distinct display modes](D6_instance_candidates_visual.png)
 
@@ -19,6 +19,6 @@ Strong YOLOE categories are never changed by the grower. The new labels are cond
 
 **Critical:** these are class-CONDITIONED connected components on the reconstructed mesh, not full class-agnostic object segmentation, physical instance identities, cross-session tracking or a validated OVI-MAP replacement. More area or more colored regions does not imply improved segmentation IoU.
 
-Original full-resolution GLB and per-face raw versus expanded evidence, plus interactive 3D HTML, are in [run 41803927063 artifacts](https://github.com/KiRiII-C/cv_vlm/actions/runs/41803927063).
+Original full-resolution GLB and per-face raw versus expanded evidence, plus interactive 3D HTML, are in [run 41804336153 artifacts](https://github.com/KiRiII-C/cv_vlm/actions/runs/41804336153).
 
 An unbiased instance-level PQ comparison awaits aligned original GT mesh and OVI-MAP official instance labels. Its host was unreachable in D5; D6 does not silently substitute wrong vertex order or fabricate scores.
