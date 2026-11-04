@@ -43,17 +43,43 @@ def repair(args):
         files.extend([
          f"Replica/office0/results/frame{frame:06}.jpg",
          f"Replica/office0/results/depth{frame:06}.png"])
-    with RemoteZip(URL,initial_buffer_size=1048576,timeout=180) as z:
-        all_files={f.filename:f.file_size for f in z.infolist()}
-        for i,name in enumerate(files):
-            if name not in all_files:raise RuntimeError("Missing original withheld source "+name)
-            dest=args.source/name
-            dest.parent.mkdir(parents=True,exist_ok=True)
-            payload=z.read(name)
-            if len(payload)!=all_files[name]:
-                raise RuntimeError("Incomplete original measurement "+name)
-            dest.write_bytes(payload)
-            if i%20==0:print("D4_RAYCAST_METRIC_REPAIR_SOURCE",i,len(files),flush=True)
+    # The 12.4GB original remote ZIP is read by HTTP ranges. The research
+    # host sometimes times out at the TLS handshake; preserve completed
+    # original source files and retry without changing their content.
+    import time
+    manifest=None
+    for attempt in range(5):
+        try:
+            with RemoteZip(URL,initial_buffer_size=1048576,timeout=240) as z:
+                manifest={f.filename:f.file_size for f in z.infolist()}
+            break
+        except Exception as exc:
+            print("D4_M1_ORIGINAL_SOURCE_MANIFEST_RETRY",
+                  attempt+1,type(exc).__name__,str(exc)[:150],flush=True)
+            if attempt==4:raise
+            time.sleep(1.5*(attempt+1))
+    for i,name in enumerate(files):
+        if name not in manifest:
+            raise RuntimeError("Missing original withheld source "+name)
+        dest=args.source/name
+        dest.parent.mkdir(parents=True,exist_ok=True)
+        if dest.is_file() and dest.stat().st_size==manifest[name]:
+            continue
+        for attempt in range(5):
+            try:
+                with RemoteZip(URL,initial_buffer_size=1048576,timeout=240) as z:
+                    payload=z.read(name)
+                if len(payload)!=manifest[name]:
+                    raise RuntimeError("Incomplete original measurement "+name)
+                dest.write_bytes(payload)
+                break
+            except Exception as exc:
+                print("D4_M1_ORIGINAL_FILE_RETRY",i,attempt+1,
+                      type(exc).__name__,str(exc)[:150],flush=True)
+                if attempt==4:raise
+                time.sleep(1.0*(attempt+1))
+        if i%20==0:
+            print("D4_RAYCAST_METRIC_REPAIR_SOURCE",i,len(files),flush=True)
     src,gt,K,poses,scale,meta=read_partial_source(args.source,original,heldout)
     new=raycast_measured_quality(mesh,src,sorted(heldout),
                                 poses,K,scale,stride=8,max_depth=7.)
