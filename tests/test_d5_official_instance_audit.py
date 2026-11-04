@@ -47,9 +47,9 @@ class D5InstanceMathTests(unittest.TestCase):
         self.assertEqual(r["abstained_area_fraction_of_GT_matched"],1)
 
     def test_unknown_gt_does_not_form_false_physical_instance(self):
-        gt=np.concatenate((np.full(50,-1),np.zeros(50,dtype=int)))
-        p=np.concatenate((np.full(50,1),np.full(50,2)))
-        r=evaluate_instance_regions(gt,p,np.ones(100),gmin=.01,pmin=.01)
+        gt=np.concatenate((np.full(110,-1),np.zeros(110,dtype=int)))
+        p=np.concatenate((np.full(110,1),np.full(110,2)))
+        r=evaluate_instance_regions(gt,p,np.ones(220),gmin=.01,pmin=.01)
         self.assertEqual(r["independent_GT_objects_with_min_observed_area"],1)
         self.assertEqual(r["proposed_regions_with_min_observed_area"],1)
 
