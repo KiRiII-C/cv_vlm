@@ -149,8 +149,8 @@ jobs:
             'strong-looking colored regions can merge separate objects and miss small ones. '
             'Variant changes were predeclared without reading GT; selecting the best on this same scene '
             'would not be a fair generalization test.',
-            '', '**Not evaluated:** physical-ID tracking/IDF1, VLM query retrieval, RTAB-Map ATE, "
-            "open-world missing instances, Nav2 safety. No new detector model was trained.",
+            '', '**Not evaluated:** physical-ID tracking/IDF1, VLM query retrieval, RTAB-Map ATE, '
+            'open-world missing instances, Nav2 safety. No new detector model was trained.',
             '', f'Full PLY GT-independent D4 map remains in [D4 run 41645799954]'
             '(https://github.com/KiRiII-C/cv_vlm/actions/runs/41645799954). '
             f'Full D5 per-face GT comparison is in [CI artifacts]'
